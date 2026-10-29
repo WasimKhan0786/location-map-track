@@ -1,0 +1,15 @@
+[
+  {
+    "id": "mvtko3whrpyqb",
+    "latitude": 28.54896398289019,
+    "longitude": 77.30348058541034,
+    "accuracy": 106,
+    "altitude": null,
+    "speed": null,
+    "heading": null,
+    "clientTimestamp": "2026-10-29T13:21:38.139Z",
+    "receivedAt": "2026-10-29T13:21:38.753Z",
+    "clientIp": "::1",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
+  }
+]

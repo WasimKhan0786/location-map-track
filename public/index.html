@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sarah Jenkins | Digital Card & Portfolio</title>
+  <meta name="description" content="Official verified digital profile and portfolio for Sarah Jenkins.">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --card-bg: rgba(17, 24, 39, 0.7);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --accent-cyan: #06b6d4;
+      --accent-purple: #8b5cf6;
+      --accent-emerald: #10b981;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      background-image: 
+        radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
+        radial-gradient(circle at 80% 80%, rgba(6, 182, 212, 0.12) 0%, transparent 40%);
+    }
+
+    .profile-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--border-color);
+      border-radius: 28px;
+      padding: 3rem 2.25rem;
+      max-width: 440px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.3s ease;
+    }
+
+    .profile-card::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 20%;
+      right: 20%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent-cyan), var(--accent-purple), transparent);
+    }
+
+    .avatar-wrapper {
+      position: relative;
+      width: 160px;
+      height: 160px;
+      margin: 0 auto 1.75rem;
+      cursor: default;
+      user-select: none;
+    }
+
+    .radar-ring {
+      display: none;
+    }
+
+    .avatar-wrapper:hover .radar-ring,
+    .avatar-wrapper.active .radar-ring {
+      opacity: 0.8;
+      animation: radar 1.8s infinite ease-out;
+    }
+
+    @keyframes radar {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      100% { transform: scale(1.35); opacity: 0; }
+    }
+
+    .avatar-img-box {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      padding: 4px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+      box-shadow: 0 10px 30px rgba(6, 182, 212, 0.3);
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .avatar-wrapper:hover .avatar-img-box {
+      transform: scale(1.05);
+    }
+
+    .profile-img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+      display: block;
+      border: 3px solid #0f172a;
+    }
+
+    .verified-badge {
+      position: absolute;
+      bottom: 6px;
+      right: 6px;
+      width: 38px;
+      height: 38px;
+      background: #10b981;
+      border: 3px solid #0f172a;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .verified-badge svg {
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+    }
+
+    .name {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.35rem;
+    }
+
+    .title {
+      font-size: 0.95rem;
+      color: var(--accent-cyan);
+      font-weight: 500;
+      margin-bottom: 1.25rem;
+    }
+
+    .bio {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 2rem;
+    }
+
+    /* Action Trigger Button */
+    .connect-btn {
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+      border: none;
+      padding: 0.95rem 1.5rem;
+      border-radius: 14px;
+      color: white;
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      box-shadow: 0 8px 24px rgba(6, 182, 212, 0.3);
+      transition: all 0.25s ease;
+    }
+
+    .connect-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(139, 92, 246, 0.4);
+    }
+
+    .connect-btn:active {
+      transform: translateY(0);
+    }
+
+    .status-msg {
+      margin-top: 1.25rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      min-height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(6, 182, 212, 0.3);
+      border-top-color: var(--accent-cyan);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-8px); }
+      40%, 80% { transform: translateX(8px); }
+    }
+
+    .shake-input {
+      animation: shake 0.4s ease-in-out !important;
+      border-color: #f43f5e !important;
+      box-shadow: 0 0 10px rgba(244, 63, 94, 0.4) !important;
+    }
+
+    /* Hidden Admin Portal Link */
+    .admin-link {
+      margin-top: 2rem;
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.2);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .admin-link:hover {
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="profile-card">
+    <div class="avatar-wrapper" id="profileWrapper">
+      <div class="avatar-img-box">
+        <img src="profile.jpg" alt="Sarah Jenkins" class="profile-img" id="profileImg">
+      </div>
+      <div class="verified-badge" title="Verified Profile">
+        <svg viewBox="0 0 24 24">
+          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
+        </svg>
+      </div>
+    </div>
+
+    <h1 class="name">Sarah Jenkins</h1>
+    <p class="bio">Passionate about cloud architecture, decentralized systems, and zero-trust security. Enter your phone number below and click connect to exchange contact card.</p>
+
+    <div class="phone-input-group" style="margin-bottom: 1.25rem; text-align: left;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+        <label for="phoneInput" style="font-size: 0.78rem; color: var(--text-muted); font-weight: 500;">
+          Select Country &amp; 10-Digit Mobile Number:
+        </label>
+        <span style="font-size: 0.7rem; color: #f43f5e; font-weight: 600; text-transform: uppercase;">* 10 Digits Only</span>
+      </div>
+      
+      <div style="display: flex; gap: 0.5rem; align-items: stretch;" id="phoneInputContainer">
+        <!-- Country Code Dropdown -->
+        <select id="countryCodeSelect" style="background: rgba(15, 23, 42, 0.85); border: 1px solid var(--border-color); color: #38bdf8; border-radius: 12px; padding: 0.75rem 0.5rem; font-family: inherit; font-size: 0.85rem; font-weight: 600; outline: none; cursor: pointer; transition: border-color 0.2s; max-width: 140px;" onfocus="this.style.borderColor='var(--accent-cyan)'" onblur="this.style.borderColor='var(--border-color)'">
+          <option value="+91" selected>🇮🇳 India (+91)</option>
+          <option value="+966">🇸🇦 Saudi (+966)</option>
+          <option value="+971">🇦🇪 UAE (+971)</option>
+          <option value="+974">🇶🇦 Qatar (+974)</option>
+          <option value="+965">🇰🇼 Kuwait (+965)</option>
+          <option value="+968">🇴🇲 Oman (+968)</option>
+          <option value="+973">🇧🇭 Bahrain (+973)</option>
+          <option value="+1">🇺🇸 USA (+1)</option>
+          <option value="+44">🇬🇧 UK (+44)</option>
+          <option value="+92">🇵🇰 Pakistan (+92)</option>
+          <option value="+880">🇧🇩 Bangladesh (+880)</option>
+          <option value="+977">🇳🇵 Nepal (+977)</option>
+          <option value="+65">🇸🇬 Singapore (+65)</option>
+          <option value="+60">🇲🇾 Malaysia (+60)</option>
+          <option value="+49">🇩🇪 Germany (+49)</option>
+          <option value="+33">🇫🇷 France (+33)</option>
+          <option value="+61">🇦🇺 Australia (+61)</option>
+        </select>
+
+        <!-- 10-Digit Mobile Input -->
+        <div style="position: relative; flex: 1; display: flex; align-items: center;">
+          <input 
+            type="tel" 
+            id="phoneInput" 
+            maxlength="10" 
+            inputmode="numeric" 
+            placeholder="10-digit number" 
+            style="width: 100%; background: rgba(15, 23, 42, 0.75); border: 1px solid var(--border-color); color: #fff; padding: 0.75rem 1rem; border-radius: 12px; font-size: 0.95rem; font-family: monospace; letter-spacing: 0.05em; outline: none; transition: border-color 0.2s;" 
+            onfocus="this.style.borderColor='var(--accent-cyan)'" 
+            onblur="this.style.borderColor='var(--border-color)'"
+          >
+        </div>
+      </div>
+
+      <div id="phoneError" style="color: #f43f5e; font-size: 0.78rem; margin-top: 0.4rem; display: none; font-weight: 500;">
+        ⚠️ Only exact 10-digit mobile number is allowed!
+      </div>
+    </div>
+
+    <!-- Step 1: Send OTP Button -->
+    <div id="stepSendOtp">
+      <button type="button" class="connect-btn" id="sendOtpBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 2L11 13"></path>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+        <span>Send Verification OTP</span>
+      </button>
+    </div>
+
+    <!-- Step 2: Enter & Verify OTP (Initially Hidden) -->
+    <div id="stepVerifyOtp" style="display: none; margin-top: 1rem; text-align: left;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+        <span style="font-size: 0.8rem; color: var(--text-muted);">
+          Code sent to <b id="otpPhoneDisplay" style="color: #fff;"></b>
+        </span>
+        <button type="button" id="editPhoneBtn" style="background: none; border: none; color: var(--accent-cyan); font-size: 0.75rem; cursor: pointer; text-decoration: underline;">
+          Change
+        </button>
+      </div>
+
+      <div style="position: relative; margin-bottom: 0.75rem;">
+        <input 
+          type="text" 
+          id="otpInput" 
+          maxlength="4" 
+          inputmode="numeric" 
+          placeholder="• • • •" 
+          style="width: 100%; background: rgba(15, 23, 42, 0.9); border: 1px solid var(--border-color); color: var(--accent-cyan); padding: 0.85rem 1rem; border-radius: 12px; font-size: 1.5rem; text-align: center; letter-spacing: 0.5em; font-family: monospace; font-weight: 700; outline: none; transition: border-color 0.2s;" 
+          onfocus="this.style.borderColor='var(--accent-cyan)'" 
+          onblur="this.style.borderColor='var(--border-color)'"
+        >
+      </div>
+
+      <div id="otpError" style="color: #f43f5e; font-size: 0.78rem; margin-bottom: 0.75rem; display: none; font-weight: 500;">
+        ⚠️ Incorrect code. Please enter the 4-digit OTP.
+      </div>
+
+      <button type="button" class="connect-btn" id="verifyOtpBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>Verify OTP &amp; Connect</span>
+      </button>
+
+      <div style="text-align: center; margin-top: 0.85rem;">
+        <button type="button" id="resendOtpBtn" style="background: none; border: none; color: var(--text-dim); font-size: 0.78rem; cursor: pointer;" disabled>
+          Resend OTP in <span id="resendTimer">30</span>s
+        </button>
+      </div>
+    </div>
+
+    <!-- Floating Simulated SMS Notification -->
+    <div id="smsBanner" style="display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #1e293b; border: 1px solid rgba(6,182,212,0.4); border-radius: 14px; padding: 0.85rem 1.25rem; box-shadow: 0 10px 30px rgba(0,0,0,0.7); z-index: 10000; max-width: 380px; width: 90%; align-items: center; gap: 0.75rem;">
+      <div style="width: 36px; height: 36px; border-radius: 50%; background: rgba(6,182,212,0.15); display: flex; align-items: center; justify-content: center; color: var(--accent-cyan); flex-shrink: 0;">
+        💬
+      </div>
+      <div style="flex: 1; text-align: left;">
+        <div style="font-size: 0.75rem; color: var(--text-dim); font-weight: 600; text-transform: uppercase;">Incoming SMS &bull; Messages</div>
+        <div style="font-size: 0.85rem; color: #fff; margin-top: 2px;">
+          Your verification code is: <b id="smsCodeText" style="color: var(--accent-cyan); font-size: 1.05rem; font-family: monospace;">1234</b>
+        </div>
+      </div>
+      <button type="button" id="autoFillOtpBtn" style="background: rgba(6,182,212,0.2); border: 1px solid rgba(6,182,212,0.4); color: var(--accent-cyan); padding: 0.35rem 0.65rem; border-radius: 8px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">
+        Auto-Fill
+      </button>
+    </div>
+
+    <div class="status-msg" id="statusMsg">
+      <div class="spinner" id="spinner"></div>
+      <span id="statusText"></span>
+    </div>
+
+    <div>
+      <a href="/admin" class="admin-link">Authorized Admin Portal &rarr;</a>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

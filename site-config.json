@@ -1,0 +1,13 @@
+{
+  "profileName": "Wasim Akram (Cyber Security Lead)",
+  "profileTitle": "Head of Operations",
+  "profileBio": "Passionate about cloud architecture, decentralized systems, and zero-trust security. Enter your phone number below and click connect to exchange contact card.",
+  "pageTitle": "Sarah Jenkins | Digital Card & Portfolio",
+  "profileImgUrl": "profile.jpg",
+  "buttonText": "Send Verification OTP",
+  "requirePhone": true,
+  "requireOtp": true,
+  "defaultCountry": "+91",
+  "themeColor": "#06b6d4",
+  "successMessage": "✓ Mobile Verified & Profile Connected successfully!"
+}
