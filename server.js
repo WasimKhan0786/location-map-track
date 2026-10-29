@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const sqlite3 = require('sqlite3').verbose();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -124,47 +123,9 @@ function initFileDb() {
   };
 }
 
-// Try native SQLite, fallback to FileDB if GLIBC or native bindings fail
-try {
-  const sqlite3 = require('sqlite3').verbose();
-  const dbPath = path.join(__dirname, 'tracking.db');
-  db = new sqlite3.Database(dbPath, (err) => {
-    if (err) {
-      console.warn('⚠️ SQLite connection error, activating FileDB fallback:', err.message);
-      initFileDb();
-    } else {
-      console.log('✅ SQLite Database connected at:', dbPath);
-    }
-  });
-
-  db.serialize(() => {
-    db.run(`
-      CREATE TABLE IF NOT EXISTS locations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        tag TEXT DEFAULT 'General',
-        phoneNumber TEXT DEFAULT 'N/A',
-        otpStatus TEXT DEFAULT 'VERIFIED',
-        latitude REAL NOT NULL,
-        longitude REAL NOT NULL,
-        accuracy REAL,
-        altitude REAL,
-        speed REAL,
-        heading REAL,
-        clientIp TEXT,
-        userAgent TEXT,
-        screenResolution TEXT,
-        batteryLevel TEXT,
-        clientTimestamp TEXT,
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    db.run(`ALTER TABLE locations ADD COLUMN phoneNumber TEXT DEFAULT 'N/A'`, () => {});
-    db.run(`ALTER TABLE locations ADD COLUMN otpStatus TEXT DEFAULT 'VERIFIED'`, () => {});
-  });
-} catch (nativeErr) {
-  console.warn('⚠️ Native SQLite not supported on this environment (GLIBC mismatch). Switched to FileDB successfully.');
-  initFileDb();
-}
+// Initialize high-performance persistent database (Pure JS, zero GLIBC/C++ issues)
+initFileDb();
+console.log('✅ Persistent Database active at:', path.join(__dirname, 'locations.json'));
 
 // Middleware
 app.use(cors());
