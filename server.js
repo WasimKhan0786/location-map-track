@@ -19,7 +19,7 @@ const DEFAULT_CONFIG = {
   requireOtp: true,
   defaultCountry: '+91',
   themeColor: '#06b6d4',
-  successMessage: '✓ Mobile Verified & Profile Connected successfully!'
+  successMessage: 'Thank you for sharing location & number! Mujhe need tha ye cheez ka, aapse mulaqat bahut jaldi hoga bhai ❤️🤝'
 };
 
 function getSiteConfig() {

