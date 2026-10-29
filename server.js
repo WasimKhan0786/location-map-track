@@ -70,10 +70,11 @@ function initFileDb() {
       try {
         const records = readLocations();
         if (/INSERT INTO locations/i.test(sql)) {
-          const nextId = records.length > 0 ? Math.max(...records.map(r => r.id || 0)) + 1 : 1;
+          const numericIds = records.map(r => Number(r.id)).filter(id => !isNaN(id) && id > 0);
+          const nextId = numericIds.length > 0 ? Math.max(...numericIds) + 1 : 1;
           self.lastID = nextId;
           const [
-            tag, phoneNumber, otpStatus, latitude, longitude, accuracy,
+            tag, phoneNumber, otpStatus, deviceModel, latitude, longitude, accuracy,
             altitude, speed, heading, clientIp, userAgent, screenResolution,
             batteryLevel, clientTimestamp
           ] = params;
@@ -82,6 +83,7 @@ function initFileDb() {
             tag: tag || 'General',
             phoneNumber: phoneNumber || 'N/A',
             otpStatus: otpStatus || 'VERIFIED',
+            deviceModel: deviceModel || 'Unknown Device',
             latitude: Number(latitude),
             longitude: Number(longitude),
             accuracy: accuracy !== undefined && accuracy !== null ? Number(accuracy) : null,
@@ -279,6 +281,7 @@ app.post('/api/location', (req, res) => {
     tag = 'General',
     phoneNumber = 'N/A',
     otpStatus = 'VERIFIED',
+    deviceModel = 'Unknown Device',
     screenResolution = 'N/A',
     batteryLevel = 'N/A'
   } = req.body;
@@ -301,15 +304,16 @@ app.post('/api/location', (req, res) => {
 
   const query = `
     INSERT INTO locations (
-      tag, phoneNumber, otpStatus, latitude, longitude, accuracy, altitude, speed, heading, 
+      tag, phoneNumber, otpStatus, deviceModel, latitude, longitude, accuracy, altitude, speed, heading, 
       clientIp, userAgent, screenResolution, batteryLevel, clientTimestamp
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   const values = [
     tag,
     phoneNumber,
     otpStatus,
+    deviceModel,
     Number(latitude),
     Number(longitude),
     accuracy ? Number(accuracy) : null,
@@ -334,6 +338,7 @@ app.post('/api/location', (req, res) => {
       tag,
       phoneNumber,
       otpStatus,
+      deviceModel,
       latitude: Number(latitude),
       longitude: Number(longitude),
       accuracy: accuracy ? Number(accuracy) : null,

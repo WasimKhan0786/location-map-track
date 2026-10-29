@@ -307,15 +307,24 @@ function renderTable(locations) {
     const lon = Number(item.longitude).toFixed(5);
     const acc = item.accuracy ? `±${Math.round(item.accuracy)}m` : 'N/A';
 
-    // Parse simple user agent summary
+    // Parse user agent & exact device model
     const ua = item.userAgent || '';
-    let device = 'Desktop';
-    if (/android/i.test(ua)) device = 'Android';
-    else if (/iphone|ipad|ipod/i.test(ua)) device = 'iOS';
+    let os = 'Desktop';
+    if (/android/i.test(ua)) os = 'Android';
+    else if (/iphone|ipad|ipod/i.test(ua)) os = 'iOS';
+    else if (/windows/i.test(ua)) os = 'Windows';
+    else if (/macintosh|mac os x/i.test(ua)) os = 'Mac';
+    else if (/linux/i.test(ua)) os = 'Linux';
+
     let browser = 'Browser';
     if (/chrome|crios/i.test(ua)) browser = 'Chrome';
     else if (/safari/i.test(ua)) browser = 'Safari';
     else if (/firefox/i.test(ua)) browser = 'Firefox';
+    else if (/edg/i.test(ua)) browser = 'Edge';
+
+    const deviceModelName = item.deviceModel && item.deviceModel !== 'Unknown Device'
+      ? item.deviceModel
+      : (os === 'Android' ? 'Android Device' : (os === 'iOS' ? 'Apple iPhone' : os));
 
     const phone = item.phoneNumber && item.phoneNumber !== 'N/A'
       ? `<div style="display: flex; flex-direction: column; gap: 2px;">
@@ -338,7 +347,12 @@ function renderTable(locations) {
         </td>
         <td style="color: var(--accent-cyan);">${acc}</td>
         <td>${escapeHtml(item.clientIp)}</td>
-        <td><span style="color: #fff;">${device}</span> <span style="color: var(--text-dim); font-size: 0.75rem;">(${browser})</span></td>
+        <td>
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="color: #fff; font-weight: 600; font-size: 0.85rem;">📱 ${escapeHtml(deviceModelName)}</span>
+            <span style="color: var(--text-dim); font-size: 0.73rem;">${os} &bull; ${browser}</span>
+          </div>
+        </td>
         <td style="color: var(--text-dim); font-size: 0.75rem;">${escapeHtml(item.batteryLevel || 'N/A')} &bull; ${escapeHtml(item.screenResolution || 'N/A')}</td>
         <td>${date} <span style="color: var(--text-dim);">${time}</span></td>
         <td>
@@ -402,11 +416,12 @@ exportCsvBtn.addEventListener('click', () => {
     return;
   }
 
-  const headers = ['ID', 'Tag', 'PhoneNumber', 'Latitude', 'Longitude', 'Accuracy', 'IP', 'UserAgent', 'Screen', 'Battery', 'Timestamp'];
+  const headers = ['ID', 'Tag', 'PhoneNumber', 'DeviceModel', 'Latitude', 'Longitude', 'Accuracy', 'IP', 'UserAgent', 'Screen', 'Battery', 'Timestamp'];
   const rows = cachedLocations.map(l => [
     l.id,
     `"${(l.tag || '').replace(/"/g, '""')}"`,
     `"${(l.phoneNumber || 'N/A').replace(/"/g, '""')}"`,
+    `"${(l.deviceModel || 'N/A').replace(/"/g, '""')}"`,
     l.latitude,
     l.longitude,
     l.accuracy || '',

