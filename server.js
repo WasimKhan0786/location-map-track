@@ -134,7 +134,7 @@ console.log('✅ Persistent Database active at:', path.join(__dirname, 'location
 app.use(cors());
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // --------------------------------------------------------------------------
 // Real-Time Server-Sent Events (SSE) for Authorized Admin
@@ -426,7 +426,7 @@ app.get('/api/config', (req, res) => {
 
 app.post('/api/admin/config', checkAdminAuth, (req, res) => {
   const current = getSiteConfig();
-  const updated = { ...current, ...req.body };
+  const updated = { ...current, ...req.body, updatedAt: Date.now() };
   saveSiteConfig(updated);
   broadcastToAdmins({ type: 'CONFIG_UPDATED', config: updated });
   console.log(`🎨 [UI Config Updated by Admin] Name: ${updated.profileName} | OTP: ${updated.requireOtp}`);
@@ -469,9 +469,10 @@ app.post('/api/admin/upload-dp', checkAdminAuth, (req, res) => {
 
     const relativeUrl = `/uploads/${safeFilename}`;
 
-    // Update site-config
+    // Update site-config with cache-busting timestamp for social scrapers
     const current = getSiteConfig();
     current.profileImgUrl = relativeUrl;
+    current.updatedAt = Date.now();
     saveSiteConfig(current);
 
     // Broadcast config update to all admin and frontend clients
@@ -490,13 +491,83 @@ app.post('/api/admin/upload-dp', checkAdminAuth, (req, res) => {
   }
 });
 
+// --------------------------------------------------------------------------
+// Dynamic Open Graph / Social Link Preview Handler (Instagram, FB, WhatsApp)
+// --------------------------------------------------------------------------
+function escapeHtmlMeta(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function serveDynamicIndex(req, res) {
+  const indexPath = path.join(__dirname, 'public', 'index.html');
+  fs.readFile(indexPath, 'utf-8', (err, html) => {
+    if (err) {
+      console.error('❌ Error reading index.html:', err);
+      return res.status(500).send('Server Error');
+    }
+
+    const config = getSiteConfig();
+    const forwardedProto = req.headers['x-forwarded-proto'];
+    const protocol = (forwardedProto ? forwardedProto.split(',')[0].trim() : req.protocol) || 'http';
+    const host = req.get('host') || `localhost:${PORT}`;
+    const baseUrl = `${protocol}://${host}`;
+
+    // Resolve full absolute URL for og:image (required by Instagram / Meta)
+    let imageUrl = config.profileImgUrl || 'profile.jpg';
+    if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+      const cleanPath = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
+      imageUrl = `${baseUrl}${cleanPath}`;
+    }
+
+    // Determine MIME type
+    let imageType = 'image/jpeg';
+    if (imageUrl.toLowerCase().includes('.png')) imageType = 'image/png';
+    else if (imageUrl.toLowerCase().includes('.webp')) imageType = 'image/webp';
+    else if (imageUrl.toLowerCase().includes('.gif')) imageType = 'image/gif';
+
+    // Append cache buster so platforms like Instagram don't serve stale cached images
+    const cacheBuster = `v=${config.updatedAt || Date.now()}`;
+    const fullImageUrl = imageUrl.includes('?') ? `${imageUrl}&${cacheBuster}` : `${imageUrl}?${cacheBuster}`;
+    const fullPageUrl = `${baseUrl}${req.originalUrl.split('?')[0]}`;
+
+    const title = config.pageTitle || `${config.profileName} | Digital Card & Portfolio`;
+    const description = config.profileBio || config.profileTitle || 'Official verified digital profile and portfolio.';
+
+    const rendered = html
+      .replace(/{{PAGE_TITLE}}/g, escapeHtmlMeta(title))
+      .replace(/{{PAGE_DESCRIPTION}}/g, escapeHtmlMeta(description))
+      .replace(/{{OG_TITLE}}/g, escapeHtmlMeta(title))
+      .replace(/{{OG_DESCRIPTION}}/g, escapeHtmlMeta(description))
+      .replace(/{{OG_URL}}/g, fullPageUrl)
+      .replace(/{{OG_IMAGE}}/g, fullImageUrl)
+      .replace(/{{OG_IMAGE_TYPE}}/g, imageType);
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    return res.send(rendered);
+  });
+}
+
 // Routes
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// Dynamic Root Page for Scrapers & Visitors
+app.get('/', serveDynamicIndex);
+
+// Fallback for SPA routing while letting static assets and API pass through
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.includes('.')) {
+    return next();
+  }
+  serveDynamicIndex(req, res);
 });
 
 // Start Server
