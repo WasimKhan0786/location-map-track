@@ -596,7 +596,7 @@ function renderQueries(queries) {
 
         <!-- Question Bubble (if user entered text) -->
         ${q.query ? `
-        <div style="background: rgba(6, 182, 212, 0.08); border-left: 3px solid var(--accent-cyan); border-radius: 0 10px 10px 0; padding: 0.8rem 1rem; color: #fff; font-size: 0.95rem; line-height: 1.5; font-weight: 500;">
+        <div style="background: rgba(6, 182, 212, 0.12); border-left: 4px solid var(--accent-cyan); border-radius: 0 12px 12px 0; padding: 0.9rem 1.2rem; color: #ffffff; font-size: 1.02rem; line-height: 1.6; font-weight: 600; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);">
           "${escapeHtml(q.query)}"
         </div>
         ` : ''}
