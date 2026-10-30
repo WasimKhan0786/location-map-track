@@ -130,6 +130,30 @@ function initFileDb() {
 initFileDb();
 console.log('✅ Persistent Database active at:', path.join(__dirname, 'locations.json'));
 
+// --------------------------------------------------------------------------
+// User Queries & Questions Database (FileDB)
+// --------------------------------------------------------------------------
+const QUERIES_FILE = path.join(__dirname, 'queries.json');
+
+function readQueries() {
+  try {
+    if (fs.existsSync(QUERIES_FILE)) {
+      return JSON.parse(fs.readFileSync(QUERIES_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('FileDB readQueries error:', e);
+  }
+  return [];
+}
+
+function writeQueries(data) {
+  try {
+    fs.writeFileSync(QUERIES_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('FileDB writeQueries error:', e);
+  }
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '25mb' }));
@@ -186,7 +210,7 @@ const activeOtps = new Map();
 
 // Endpoint to send real-time OTP
 app.post('/api/otp/send', (req, res) => {
-  const { phoneNumber, tag = 'General' } = req.body;
+  const { phoneNumber, tag = 'General' } = req.body || {};
 
   if (!phoneNumber || phoneNumber.replace(/[^0-9]/g, '').length < 10) {
     return res.status(400).json({ success: false, error: 'Valid 10-digit mobile number required' });
@@ -223,7 +247,7 @@ app.post('/api/otp/send', (req, res) => {
 
 // Endpoint to verify real-time OTP
 app.post('/api/otp/verify', (req, res) => {
-  const { phoneNumber, otp } = req.body;
+  const { phoneNumber, otp } = req.body || {};
 
   if (!phoneNumber || !otp) {
     return res.status(400).json({ success: false, error: 'Phone number and verification code are required' });
@@ -285,7 +309,7 @@ app.post('/api/location', (req, res) => {
     deviceModel = 'Unknown Device',
     screenResolution = 'N/A',
     batteryLevel = 'N/A'
-  } = req.body;
+  } = req.body || {};
 
   if (latitude === undefined || longitude === undefined) {
     return res.status(400).json({ success: false, error: 'Missing coordinates' });
@@ -368,12 +392,103 @@ app.post('/api/location', (req, res) => {
 });
 
 // --------------------------------------------------------------------------
+// Public User Question / Voice Query Endpoint (POST /api/query)
+// --------------------------------------------------------------------------
+app.post('/api/query', (req, res) => {
+  const { query, audioData, audioDuration, phoneNumber = 'N/A', tag = 'General Visitor' } = req.body || {};
+
+  const cleanQuery = (query || '').trim();
+
+  // Validate: At least text question or voice note must be provided
+  if (!cleanQuery && !audioData) {
+    return res.status(400).json({
+      success: false,
+      error: 'Kripya apna sawal likhein ya voice note record karein'
+    });
+  }
+
+  let audioUrl = null;
+  let parsedDuration = audioDuration ? Math.round(Number(audioDuration)) : null;
+
+  // Process and save Voice Note if attached
+  if (audioData) {
+    try {
+      const uploadsDir = path.join(__dirname, 'public', 'uploads');
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+
+      let ext = 'webm';
+      let base64String = audioData;
+
+      const matches = audioData.match(/^data:audio\/([a-zA-Z0-9_\-+]+);base64,(.+)$/);
+      if (matches) {
+        const mimeSub = matches[1].toLowerCase();
+        if (mimeSub.includes('mp4') || mimeSub.includes('m4a')) ext = 'mp4';
+        else if (mimeSub.includes('ogg')) ext = 'ogg';
+        else if (mimeSub.includes('wav')) ext = 'wav';
+        else if (mimeSub.includes('aac')) ext = 'aac';
+        else if (mimeSub.includes('mpeg') || mimeSub.includes('mp3')) ext = 'mp3';
+        else ext = 'webm';
+        base64String = matches[2];
+      }
+
+      const safeFilename = `voice_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+      const targetPath = path.join(uploadsDir, safeFilename);
+      fs.writeFileSync(targetPath, Buffer.from(base64String, 'base64'));
+      audioUrl = `/uploads/${safeFilename}`;
+      console.log(`🎙️ [Voice Note Saved] File: ${safeFilename} (${Math.round(base64String.length * 0.75 / 1024)} KB)`);
+    } catch (audioErr) {
+      console.error('❌ Failed to save voice audio note:', audioErr);
+    }
+  }
+
+  const clientIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1')
+    .replace('::ffff:', '');
+  const userAgent = req.headers['user-agent'] || 'Unknown';
+  const queries = readQueries();
+
+  const numericIds = queries.map(q => Number(q.id)).filter(id => !isNaN(id) && id > 0);
+  const nextId = numericIds.length > 0 ? Math.max(...numericIds) + 1 : 1;
+
+  const newQuery = {
+    id: nextId,
+    query: cleanQuery,
+    hasAudio: !!audioUrl,
+    audioUrl: audioUrl || null,
+    audioDuration: parsedDuration,
+    phoneNumber: phoneNumber || 'N/A',
+    tag: tag || 'General Visitor',
+    clientIp,
+    userAgent,
+    createdAt: new Date().toISOString()
+  };
+
+  queries.unshift(newQuery);
+  writeQueries(queries);
+
+  console.log(`💬 [User Question Received] ID #${newQuery.id} | Phone: ${phoneNumber} | Tag: ${tag} | Voice: ${!!audioUrl} | Text: "${cleanQuery}"`);
+
+  // Instant real-time broadcast to all connected Admin Dashboards!
+  broadcastToAdmins({
+    type: 'NEW_QUERY',
+    query: newQuery
+  });
+
+  return res.status(200).json({
+    success: true,
+    message: 'Question / Voice Note sent successfully!',
+    query: newQuery
+  });
+});
+
+// --------------------------------------------------------------------------
 // Authorized Admin Protected Endpoints
 // --------------------------------------------------------------------------
 
 // Verify Admin Key
 app.post('/api/admin/verify', (req, res) => {
-  const { key } = req.body;
+  const { key } = req.body || {};
   if (key === ADMIN_ACCESS_KEY) {
     return res.json({ success: true, message: 'Authenticated' });
   }
@@ -415,6 +530,61 @@ app.delete('/api/admin/locations', checkAdminAuth, (req, res) => {
     broadcastToAdmins({ type: 'ALL_CLEARED' });
     return res.json({ success: true, message: 'All records cleared.' });
   });
+});
+
+// --------------------------------------------------------------------------
+// Admin Queries Management Endpoints
+// --------------------------------------------------------------------------
+// Get all user queries
+app.get('/api/admin/queries', checkAdminAuth, (req, res) => {
+  const queries = readQueries();
+  return res.json({
+    success: true,
+    count: queries.length,
+    queries
+  });
+});
+
+// Helper: Clean up saved audio note file if stored locally
+function deleteAudioFileIfLocal(audioUrl) {
+  if (!audioUrl || typeof audioUrl !== 'string') return;
+  try {
+    if (audioUrl.startsWith('/uploads/voice_')) {
+      const filename = path.basename(audioUrl);
+      const filePath = path.join(__dirname, 'public', 'uploads', filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log(`🗑️ [Voice Note Cleaned] Deleted file: ${filename}`);
+      }
+    }
+  } catch (e) {
+    console.error('Error cleaning audio file:', e);
+  }
+}
+
+// Delete single query
+app.delete('/api/admin/queries/:id', checkAdminAuth, (req, res) => {
+  const id = Number(req.params.id);
+  const queries = readQueries();
+  const toDelete = queries.find(q => q.id === id);
+  if (toDelete && toDelete.audioUrl) {
+    deleteAudioFileIfLocal(toDelete.audioUrl);
+  }
+  const updated = queries.filter(q => q.id !== id);
+  writeQueries(updated);
+  broadcastToAdmins({ type: 'QUERY_DELETED', id });
+  return res.json({ success: true, message: `Query #${id} deleted.` });
+});
+
+// Clear all queries
+app.delete('/api/admin/queries', checkAdminAuth, (req, res) => {
+  const queries = readQueries();
+  queries.forEach(q => {
+    if (q.audioUrl) deleteAudioFileIfLocal(q.audioUrl);
+  });
+  writeQueries([]);
+  broadcastToAdmins({ type: 'ALL_QUERIES_CLEARED' });
+  return res.json({ success: true, message: 'All queries cleared.' });
 });
 
 // --------------------------------------------------------------------------
@@ -562,12 +732,32 @@ app.get('/admin', (req, res) => {
 // Dynamic Root Page for Scrapers & Visitors
 app.get('/', serveDynamicIndex);
 
-// Fallback for SPA routing while letting static assets and API pass through
+// Catch-all for undefined /api routes (Always return JSON, never HTML!)
+app.all('/api/*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    error: `API route not found: ${req.method} ${req.originalUrl}. Make sure the server has been restarted.`
+  });
+});
+
+// Fallback for SPA routing while letting static assets pass through
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api') || req.path.includes('.')) {
     return next();
   }
   serveDynamicIndex(req, res);
+});
+
+// Global Error Handler for API & Server (Always return JSON for /api)
+app.use((err, req, res, next) => {
+  console.error('❌ Server/API Error:', err);
+  if (req.path && req.path.startsWith('/api')) {
+    return res.status(err.status || 500).json({
+      success: false,
+      error: err.message || 'Server Internal Error'
+    });
+  }
+  res.status(500).send(`Server Error: ${err.message}`);
 });
 
 // Start Server

