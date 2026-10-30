@@ -176,6 +176,24 @@
       color: var(--text-muted);
       line-height: 1.6;
       margin-bottom: 2rem;
+      min-height: 4.8rem;
+      word-break: break-word;
+    }
+
+    .typewriter-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1.15em;
+      background-color: var(--accent-cyan);
+      vertical-align: -0.18em;
+      margin-left: 2px;
+      box-shadow: 0 0 8px var(--accent-cyan);
+      animation: blinkCursor 0.75s infinite;
+    }
+
+    @keyframes blinkCursor {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
     }
 
     /* Action Trigger Button */

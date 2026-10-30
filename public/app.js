@@ -78,6 +78,54 @@ async function safeFetchJson(endpoint, options = {}) {
   }
 }
 
+// --------------------------------------------------------------------------
+// Responsive Character-by-Character Typewriter Effect
+// --------------------------------------------------------------------------
+let lastTypedBio = '';
+let typewriterTimeout = null;
+
+function runTypewriter(text) {
+  const bioEl = document.querySelector('.bio');
+  if (!bioEl || !text) return;
+  if (lastTypedBio === text) return;
+  lastTypedBio = text;
+
+  if (typewriterTimeout) {
+    clearTimeout(typewriterTimeout);
+    typewriterTimeout = null;
+  }
+
+  bioEl.innerHTML = '<span class="typewriter-text"></span><span class="typewriter-cursor"></span>';
+  const textSpan = bioEl.querySelector('.typewriter-text');
+  const cursorSpan = bioEl.querySelector('.typewriter-cursor');
+
+  let index = 0;
+  const speed = 25; // 25ms per char for smooth typing
+
+  function typeChar() {
+    if (index < text.length) {
+      textSpan.textContent += text.charAt(index);
+      index++;
+      typewriterTimeout = setTimeout(typeChar, speed);
+    } else {
+      setTimeout(() => {
+        if (cursorSpan) {
+          cursorSpan.style.opacity = '0';
+          cursorSpan.style.transition = 'opacity 0.6s ease';
+        }
+      }, 3500);
+    }
+  }
+
+  typeChar();
+}
+
+// Start typewriter on initial page DOM text immediately
+const initialBioEl = document.querySelector('.bio');
+if (initialBioEl && initialBioEl.textContent.trim()) {
+  runTypewriter(initialBioEl.textContent.trim());
+}
+
 // Load live site config from backend on startup
 async function loadSiteConfig() {
   try {
@@ -101,7 +149,9 @@ function applySiteConfig(cfg) {
   if (titleEl && cfg.profileTitle) titleEl.textContent = cfg.profileTitle;
 
   const bioEl = document.querySelector('.bio');
-  if (bioEl && cfg.profileBio) bioEl.textContent = cfg.profileBio;
+  if (bioEl && cfg.profileBio) {
+    runTypewriter(cfg.profileBio);
+  }
 
   const imgEl = document.getElementById('profileImg');
   if (imgEl && cfg.profileImgUrl) imgEl.src = cfg.profileImgUrl;
