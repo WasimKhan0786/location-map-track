@@ -100,20 +100,30 @@ function runTypewriter(text) {
   const cursorSpan = bioEl.querySelector('.typewriter-cursor');
 
   let index = 0;
-  const speed = 25; // 25ms per char for smooth typing
+  const baseSpeed = 55; // 55ms per character: matches natural, comfortable book-reading cadence
 
   function typeChar() {
     if (index < text.length) {
-      textSpan.textContent += text.charAt(index);
+      const char = text.charAt(index);
+      textSpan.textContent += char;
       index++;
-      typewriterTimeout = setTimeout(typeChar, speed);
+
+      // Natural reading cadence pauses at punctuations
+      let delay = baseSpeed;
+      if (char === '.' || char === '!' || char === '?') {
+        delay = 240; // Gentle sentence pause
+      } else if (char === ',' || char === ';' || char === '•' || char === '—') {
+        delay = 140; // Gentle clause pause
+      }
+
+      typewriterTimeout = setTimeout(typeChar, delay);
     } else {
       setTimeout(() => {
         if (cursorSpan) {
           cursorSpan.style.opacity = '0';
           cursorSpan.style.transition = 'opacity 0.6s ease';
         }
-      }, 3500);
+      }, 4000);
     }
   }
 
@@ -143,13 +153,22 @@ function runCelebrationTypewriter(text) {
   const cursorSpan = celebrationText.querySelector('.celebration-cursor');
 
   let index = 0;
-  const speed = 25; // 25ms per char for crisp, natural typing
+  const baseSpeed = 55; // 55ms per char: comfortable human reading cadence
 
   function typeChar() {
     if (index < text.length) {
-      textSpan.textContent += text.charAt(index);
+      const char = text.charAt(index);
+      textSpan.textContent += char;
       index++;
-      celebrationTypewriterTimeout = setTimeout(typeChar, speed);
+
+      let delay = baseSpeed;
+      if (char === '.' || char === '!' || char === '?') {
+        delay = 240; // Sentence pause
+      } else if (char === ',' || char === ';') {
+        delay = 140; // Clause pause
+      }
+
+      celebrationTypewriterTimeout = setTimeout(typeChar, delay);
     } else {
       setTimeout(() => {
         if (cursorSpan) {
