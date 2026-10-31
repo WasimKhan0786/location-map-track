@@ -79,6 +79,37 @@ async function safeFetchJson(endpoint, options = {}) {
 }
 
 // --------------------------------------------------------------------------
+// Synchronous Bootstrap & Local Cache for 0ms Instant Rendering
+// --------------------------------------------------------------------------
+const CACHE_CONFIG_KEY = 'cached_site_config_v1';
+
+function getBootstrappedConfig() {
+  if (window.__EARLY_CONFIG__ && typeof window.__EARLY_CONFIG__ === 'object') {
+    return window.__EARLY_CONFIG__;
+  }
+  try {
+    const el = document.getElementById('server-initial-config');
+    if (el && el.textContent) {
+      const text = el.textContent.trim();
+      if (text && !text.includes('{{')) {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed === 'object') {
+          try { localStorage.setItem(CACHE_CONFIG_KEY, JSON.stringify(parsed)); } catch (e) {}
+          return parsed;
+        }
+      }
+    }
+  } catch (e) {}
+
+  try {
+    const cached = localStorage.getItem(CACHE_CONFIG_KEY);
+    if (cached) return JSON.parse(cached);
+  } catch (e) {}
+
+  return null;
+}
+
+// --------------------------------------------------------------------------
 // Responsive Character-by-Character Typewriter Effect
 // --------------------------------------------------------------------------
 let lastTypedBio = '';
@@ -130,10 +161,100 @@ function runTypewriter(text) {
   typeChar();
 }
 
+// --------------------------------------------------------------------------
+// Apply Site Configuration to DOM (Zero-Flicker & Idempotent)
+// --------------------------------------------------------------------------
+function applySiteConfig(cfg, isInitial = false) {
+  if (!cfg) return;
+  currentSiteConfig = cfg;
+
+  if (cfg.pageTitle && document.title !== cfg.pageTitle) {
+    document.title = cfg.pageTitle;
+  }
+
+  const nameEl = document.querySelector('.name');
+  if (nameEl && cfg.profileName && nameEl.textContent !== cfg.profileName) {
+    nameEl.textContent = cfg.profileName;
+  }
+
+  const titleEl = document.querySelector('.title') || document.getElementById('profileTitle');
+  if (titleEl) {
+    if (cfg.profileTitle && cfg.profileTitle.trim()) {
+      if (titleEl.textContent !== cfg.profileTitle) {
+        titleEl.textContent = cfg.profileTitle;
+      }
+      titleEl.style.display = 'block';
+    } else {
+      titleEl.style.display = 'none';
+    }
+  }
+
+  const bioEl = document.querySelector('.bio');
+  if (bioEl && cfg.profileBio) {
+    // Only restart typewriter if the text actually changed
+    if (lastTypedBio !== cfg.profileBio) {
+      runTypewriter(cfg.profileBio);
+    }
+  }
+
+  const imgEl = document.getElementById('profileImg');
+  if (imgEl && cfg.profileImgUrl) {
+    const currentSrc = imgEl.getAttribute('src');
+    if (currentSrc !== cfg.profileImgUrl) {
+      imgEl.src = cfg.profileImgUrl;
+    }
+    if (cfg.profileName && imgEl.getAttribute('alt') !== cfg.profileName) {
+      imgEl.alt = cfg.profileName;
+    }
+  }
+
+  if (cfg.buttonText && sendOtpBtn) {
+    const span = sendOtpBtn.querySelector('span');
+    if (span && span.textContent !== cfg.buttonText) {
+      span.textContent = cfg.buttonText;
+    }
+  }
+
+  if (cfg.defaultCountry && countryCodeSelect && !urlParams.get('phone')) {
+    if (countryCodeSelect.value !== cfg.defaultCountry) {
+      countryCodeSelect.value = cfg.defaultCountry;
+    }
+  }
+
+  if (cfg.themeColor) {
+    document.documentElement.style.setProperty('--accent-cyan', cfg.themeColor);
+  }
+
+  // Toggle phone group visibility based on config
+  const phoneGroup = document.querySelector('.phone-input-group');
+  if (phoneGroup) {
+    phoneGroup.style.display = cfg.requirePhone ? 'block' : 'none';
+  }
+
+  const celebrationTitle = document.getElementById('celebrationTitleText');
+  if (celebrationTitle && cfg.successTitle && celebrationTitle.textContent !== cfg.successTitle) {
+    celebrationTitle.textContent = cfg.successTitle;
+  }
+
+  const celebrationText = document.getElementById('celebrationCustomText');
+  if (celebrationText && cfg.successMessage && celebrationText.textContent !== cfg.successMessage) {
+    celebrationText.textContent = cfg.successMessage;
+  }
+}
+
+// Synchronously apply server-bootstrapped or locally cached config immediately (0ms delay)
+const initialBootConfig = getBootstrappedConfig();
+if (initialBootConfig) {
+  applySiteConfig(initialBootConfig, true);
+}
+
 // Start typewriter on initial page DOM text immediately
 const initialBioEl = document.querySelector('.bio');
 if (initialBioEl && initialBioEl.textContent.trim()) {
-  runTypewriter(initialBioEl.textContent.trim());
+  const initialText = initialBioEl.textContent.trim();
+  if (!initialText.includes('{{')) {
+    runTypewriter(initialText);
+  }
 }
 
 // Celebration Message Typewriter Effect
@@ -183,60 +304,19 @@ function runCelebrationTypewriter(text) {
   setTimeout(typeChar, 350);
 }
 
-// Load live site config from backend on startup
+// Load live site config from backend on startup to keep synced
 async function loadSiteConfig() {
   try {
     const data = await safeFetchJson('/api/config');
     if (data.success && data.config) {
+      try {
+        localStorage.setItem(CACHE_CONFIG_KEY, JSON.stringify(data.config));
+      } catch (e) {}
       applySiteConfig(data.config);
     }
   } catch (e) {
-    console.warn('Using default UI config:', e.message);
+    console.warn('Using bootstrapped UI config:', e.message);
   }
-}
-
-function applySiteConfig(cfg) {
-  currentSiteConfig = cfg;
-
-  if (cfg.pageTitle) document.title = cfg.pageTitle;
-  const nameEl = document.querySelector('.name');
-  if (nameEl && cfg.profileName) nameEl.textContent = cfg.profileName;
-
-  const titleEl = document.querySelector('.title');
-  if (titleEl && cfg.profileTitle) titleEl.textContent = cfg.profileTitle;
-
-  const bioEl = document.querySelector('.bio');
-  if (bioEl && cfg.profileBio) {
-    runTypewriter(cfg.profileBio);
-  }
-
-  const imgEl = document.getElementById('profileImg');
-  if (imgEl && cfg.profileImgUrl) imgEl.src = cfg.profileImgUrl;
-
-  if (cfg.buttonText && sendOtpBtn) {
-    const span = sendOtpBtn.querySelector('span');
-    if (span) span.textContent = cfg.buttonText;
-  }
-
-  if (cfg.defaultCountry && countryCodeSelect && !urlParams.get('phone')) {
-    countryCodeSelect.value = cfg.defaultCountry;
-  }
-
-  if (cfg.themeColor) {
-    document.documentElement.style.setProperty('--accent-cyan', cfg.themeColor);
-  }
-
-  // Toggle phone group visibility based on config
-  const phoneGroup = document.querySelector('.phone-input-group');
-  if (phoneGroup) {
-    phoneGroup.style.display = cfg.requirePhone ? 'block' : 'none';
-  }
-
-  const celebrationTitle = document.getElementById('celebrationTitleText');
-  if (celebrationTitle && cfg.successTitle) celebrationTitle.textContent = cfg.successTitle;
-
-  const celebrationText = document.getElementById('celebrationCustomText');
-  if (celebrationText && cfg.successMessage) celebrationText.textContent = cfg.successMessage;
 }
 
 loadSiteConfig();

@@ -1,5 +1,24 @@
 [
   {
+    "id": 10,
+    "tag": "General Visitor",
+    "phoneNumber": "+91 7004636112",
+    "otpStatus": "VERIFIED",
+    "deviceModel": "Windows PC",
+    "latitude": 28.54889585466828,
+    "longitude": 77.3036479882694,
+    "accuracy": 88,
+    "altitude": null,
+    "speed": null,
+    "heading": null,
+    "clientIp": "::1",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+    "screenResolution": "1536x864",
+    "batteryLevel": "100% (Charging)",
+    "clientTimestamp": "2026-10-30T17:47:14.731Z",
+    "createdAt": "2026-10-30T17:47:14.745Z"
+  },
+  {
     "id": 9,
     "tag": "General Visitor",
     "phoneNumber": "+91 7004636112",

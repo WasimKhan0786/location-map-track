@@ -9,10 +9,10 @@ const ADMIN_ACCESS_KEY = process.env.ADMIN_KEY || 'wasim0786';
 const CONFIG_FILE = path.join(__dirname, 'site-config.json');
 
 const DEFAULT_CONFIG = {
-  profileName: 'Sarah Jenkins',
-  profileTitle: 'Lead Systems Architect • Tech Lead',
+  profileName: 'Wasim Akram (Cyber Security Lead)',
+  profileTitle: 'Head of Operations',
   profileBio: 'Passionate about cloud architecture, decentralized systems, and zero-trust security. Enter your phone number below and click connect to exchange contact card.',
-  pageTitle: 'Sarah Jenkins | Digital Card & Portfolio',
+  pageTitle: 'Wasim Akram (Cyber Security Lead) | Digital Card & Portfolio',
   profileImgUrl: 'profile.jpg',
   buttonText: 'Send Verification OTP',
   requirePhone: true,
@@ -158,6 +158,11 @@ function writeQueries(data) {
 app.use(cors());
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+// Dynamic Landing Page (Serves SSR-rendered index.html with 0ms flash of default data)
+app.get('/', serveDynamicIndex);
+app.get('/index.html', serveDynamicIndex);
+
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // --------------------------------------------------------------------------
@@ -662,7 +667,8 @@ app.post('/api/admin/upload-dp', checkAdminAuth, (req, res) => {
 });
 
 // --------------------------------------------------------------------------
-// Dynamic Open Graph / Social Link Preview Handler (Instagram, FB, WhatsApp)
+// Dynamic SSR & Social Link Preview Handler (Instagram, FB, WhatsApp, Direct)
+// Renders profile name, title, bio, photo directly in HTML (0ms flash of default data)
 // --------------------------------------------------------------------------
 function escapeHtmlMeta(str) {
   if (!str) return '';
@@ -706,8 +712,21 @@ function serveDynamicIndex(req, res) {
     const fullImageUrl = imageUrl.includes('?') ? `${imageUrl}&${cacheBuster}` : `${imageUrl}?${cacheBuster}`;
     const fullPageUrl = `${baseUrl}${req.originalUrl.split('?')[0]}`;
 
-    const title = config.pageTitle || `${config.profileName} | Digital Card & Portfolio`;
-    const description = config.profileBio || config.profileTitle || 'Official verified digital profile and portfolio.';
+    const profileName = config.profileName || 'Wasim Akram (Cyber Security Lead)';
+    const profileTitle = config.profileTitle || '';
+    const profileBio = config.profileBio || 'Passionate about cloud architecture, decentralized systems, and zero-trust security. Enter your phone number below and click connect to exchange contact card.';
+    const profileImg = config.profileImgUrl || 'profile.jpg';
+    const buttonText = config.buttonText || 'Send Verification OTP';
+    const themeColor = config.themeColor || '#06b6d4';
+    const phoneDisplay = config.requirePhone === false ? 'none' : 'block';
+    const successTitle = config.successTitle || '✨ Thank You For Sharing!';
+    const successMessage = config.successMessage || 'Thank you for sharing location & number! Mujhe need tha ye cheez ka, aapse mulaqat bahut jaldi hoga bhai ❤️🤝';
+
+    const title = config.pageTitle || `${profileName} | Digital Card & Portfolio`;
+    const description = profileBio || profileTitle || 'Official verified digital profile and portfolio.';
+
+    // Safe JSON representation for client-side instant bootstrap
+    const safeConfigJson = JSON.stringify(config).replace(/</g, '\\u003c');
 
     const rendered = html
       .replace(/{{PAGE_TITLE}}/g, escapeHtmlMeta(title))
@@ -716,7 +735,18 @@ function serveDynamicIndex(req, res) {
       .replace(/{{OG_DESCRIPTION}}/g, escapeHtmlMeta(description))
       .replace(/{{OG_URL}}/g, fullPageUrl)
       .replace(/{{OG_IMAGE}}/g, fullImageUrl)
-      .replace(/{{OG_IMAGE_TYPE}}/g, imageType);
+      .replace(/{{OG_IMAGE_TYPE}}/g, imageType)
+      .replace(/{{INITIAL_CONFIG_JSON}}/g, safeConfigJson)
+      .replace(/--accent-cyan:\s*#06b6d4;/g, `--accent-cyan: ${escapeHtmlMeta(themeColor)};`)
+      .replace(/{{PROFILE_IMAGE}}/g, escapeHtmlMeta(profileImg))
+      .replace(/{{PROFILE_NAME}}/g, escapeHtmlMeta(profileName))
+      .replace(/{{PROFILE_TITLE}}/g, escapeHtmlMeta(profileTitle))
+      .replace(/{{PROFILE_TITLE_STYLE}}/g, profileTitle && profileTitle.trim() ? '' : 'display: none;')
+      .replace(/{{PROFILE_BIO}}/g, escapeHtmlMeta(profileBio))
+      .replace(/{{PHONE_DISPLAY}}/g, phoneDisplay)
+      .replace(/{{BUTTON_TEXT}}/g, escapeHtmlMeta(buttonText))
+      .replace(/{{SUCCESS_TITLE}}/g, escapeHtmlMeta(successTitle))
+      .replace(/{{SUCCESS_MESSAGE}}/g, escapeHtmlMeta(successMessage));
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');

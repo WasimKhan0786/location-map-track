@@ -30,6 +30,31 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   
+  <!-- Server-Side Bootstrapped Configuration (Instant 0ms SSR & Client Sync) -->
+  <script id="server-initial-config" type="application/json">{{INITIAL_CONFIG_JSON}}</script>
+  <script>
+    (function() {
+      try {
+        var el = document.getElementById('server-initial-config');
+        var cfg = null;
+        if (el && el.textContent) {
+          var t = el.textContent.trim();
+          if (t && !t.includes('{{')) cfg = JSON.parse(t);
+        }
+        if (!cfg) {
+          var cached = localStorage.getItem('cached_site_config_v1');
+          if (cached) cfg = JSON.parse(cached);
+        }
+        if (cfg) {
+          window.__EARLY_CONFIG__ = cfg;
+          if (cfg.themeColor) {
+            document.documentElement.style.setProperty('--accent-cyan', cfg.themeColor);
+          }
+        }
+      } catch(e) {}
+    })();
+  </script>
+
   <style>
     :root {
       --bg-dark: #090d16;
@@ -956,7 +981,7 @@
   <div class="profile-card">
     <div class="avatar-wrapper" id="profileWrapper">
       <div class="avatar-img-box">
-        <img src="profile.jpg" alt="Sarah Jenkins" class="profile-img" id="profileImg">
+        <img src="{{PROFILE_IMAGE}}" alt="{{PROFILE_NAME}}" class="profile-img" id="profileImg">
       </div>
       <div class="verified-badge" title="Verified Profile">
         <svg viewBox="0 0 24 24">
@@ -965,10 +990,11 @@
       </div>
     </div>
 
-    <h1 class="name">Sarah Jenkins</h1>
-    <p class="bio">Passionate about cloud architecture, decentralized systems, and zero-trust security. Enter your phone number below and click connect to exchange contact card.</p>
+    <h1 class="name">{{PROFILE_NAME}}</h1>
+    <p class="title" id="profileTitle" style="{{PROFILE_TITLE_STYLE}}">{{PROFILE_TITLE}}</p>
+    <p class="bio" id="profileBio">{{PROFILE_BIO}}</p>
 
-    <div class="phone-input-group" style="margin-bottom: 1.25rem; text-align: left;">
+    <div class="phone-input-group" style="display: {{PHONE_DISPLAY}}; margin-bottom: 1.25rem; text-align: left;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
         <label for="phoneInput" style="font-size: 0.82rem; color: #f1f5f9; font-weight: 600;">
           Select Country &amp; 10-Digit Mobile Number:
@@ -1025,7 +1051,7 @@
           <path d="M22 2L11 13"></path>
           <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
         </svg>
-        <span>Send Verification OTP</span>
+        <span id="sendOtpBtnText">{{BUTTON_TEXT}}</span>
       </button>
     </div>
 
@@ -1139,10 +1165,8 @@
           <div class="celebration-pulse"></div>
           <div class="celebration-icon">🤝</div>
         </div>
-        <h3 class="celebration-title" id="celebrationTitleText">✨ Thank You For Sharing!</h3>
-        <p class="celebration-text" id="celebrationCustomText">
-          Thank you for sharing location &amp; number! Mujhe need tha ye cheez ka, aapse mulaqat bahut jaldi hoga bhai ❤️🤝
-        </p>
+        <h3 class="celebration-title" id="celebrationTitleText">{{SUCCESS_TITLE}}</h3>
+        <p class="celebration-text" id="celebrationCustomText">{{SUCCESS_MESSAGE}}</p>
         <div class="celebration-badge">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
           <span>Location &amp; Mobile Verified</span>
