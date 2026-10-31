@@ -1003,8 +1003,22 @@ if (submitQueryBtn && userQueryText) {
     // If user is actively recording when clicking send, stop recording first
     if (mediaRecorder && mediaRecorder.state === 'recording') {
       stopVoiceRecording();
-      // Wait brief moment for blob to convert
-      await new Promise(r => setTimeout(r, 400));
+      // Wait brief moment for recording onstop event to trigger
+      await new Promise(r => setTimeout(r, 250));
+    }
+
+    // Ensure audio blob is completely converted to base64 if available
+    if (recordedAudioBlob && !recordedAudioBase64) {
+      try {
+        recordedAudioBase64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('Audio encoding failed'));
+          reader.readAsDataURL(recordedAudioBlob);
+        });
+      } catch (convErr) {
+        console.warn('Audio base64 conversion warning:', convErr);
+      }
     }
 
     const query = userQueryText.value.trim();

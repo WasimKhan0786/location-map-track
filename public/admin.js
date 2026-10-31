@@ -564,6 +564,9 @@ function renderQueries(queries) {
     const cleanPhone = (q.phoneNumber || '').replace(/[^0-9]/g, '');
     const hasPhone = cleanPhone && cleanPhone.length >= 10;
     const hasAudio = !!q.audioUrl;
+    const audioSrc = hasAudio ? (q.audioUrl.startsWith('http') ? q.audioUrl : `${API_BASE}${q.audioUrl}`) : '';
+    const audioExt = hasAudio ? (q.audioUrl.split('.').pop() || 'webm').toLowerCase() : 'webm';
+    const audioMime = audioExt === 'mp4' ? 'audio/mp4' : (audioExt === 'ogg' ? 'audio/ogg' : (audioExt === 'wav' ? 'audio/wav' : 'audio/webm'));
     
     // WhatsApp reply message text
     let replyMsg = 'Hi bhai!';
@@ -609,12 +612,12 @@ function renderQueries(queries) {
               <span>🎙️ Voice Message Audio</span>
               ${q.audioDuration ? `<span style="font-size: 0.7rem; color: #e2e8f0; font-family: var(--mono); background: rgba(139, 92, 246, 0.25); padding: 1px 6px; border-radius: 99px;">${q.audioDuration}s</span>` : ''}
             </div>
-            <a href="${q.audioUrl}" download="voice_${q.phoneNumber || q.id}.webm" target="_blank" style="font-size: 0.72rem; color: #38bdf8; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 0.25rem;">
+            <a href="${audioSrc}" download="voice_${cleanPhone || q.id}.${audioExt}" target="_blank" style="font-size: 0.72rem; color: #38bdf8; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 0.25rem;">
               ⬇️ Download Audio
             </a>
           </div>
-          <audio controls preload="metadata" style="width: 100%; height: 38px; outline: none; border-radius: 8px;">
-            <source src="${q.audioUrl}">
+          <audio controls preload="auto" src="${audioSrc}" style="width: 100%; height: 40px; outline: none; border-radius: 8px;">
+            <source src="${audioSrc}" type="${audioMime}">
             Your browser does not support audio playback.
           </audio>
         </div>

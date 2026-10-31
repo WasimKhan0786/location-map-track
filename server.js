@@ -163,6 +163,29 @@ app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 app.get('/', serveDynamicIndex);
 app.get('/index.html', serveDynamicIndex);
 
+// Dedicated Static / Audio Stream Handler for Uploaded Files (Voice Notes & Profile DP)
+app.get('/uploads/:filename', (req, res) => {
+  const safeFilename = path.basename(req.params.filename);
+  const filePath = path.join(__dirname, 'public', 'uploads', safeFilename);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ success: false, error: 'File not found' });
+  }
+
+  const ext = path.extname(safeFilename).toLowerCase();
+  if (ext === '.webm') res.type('audio/webm');
+  else if (ext === '.mp4') res.type('audio/mp4');
+  else if (ext === '.ogg') res.type('audio/ogg');
+  else if (ext === '.wav') res.type('audio/wav');
+  else if (ext === '.mp3') res.type('audio/mpeg');
+  else if (ext === '.jpg' || ext === '.jpeg') res.type('image/jpeg');
+  else if (ext === '.png') res.type('image/png');
+  else if (ext === '.webp') res.type('image/webp');
+
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  return res.sendFile(filePath);
+});
+
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // --------------------------------------------------------------------------
@@ -426,23 +449,28 @@ app.post('/api/query', (req, res) => {
       let ext = 'webm';
       let base64String = audioData;
 
-      const matches = audioData.match(/^data:audio\/([a-zA-Z0-9_\-+]+);base64,(.+)$/);
-      if (matches) {
-        const mimeSub = matches[1].toLowerCase();
-        if (mimeSub.includes('mp4') || mimeSub.includes('m4a')) ext = 'mp4';
-        else if (mimeSub.includes('ogg')) ext = 'ogg';
-        else if (mimeSub.includes('wav')) ext = 'wav';
-        else if (mimeSub.includes('aac')) ext = 'aac';
-        else if (mimeSub.includes('mpeg') || mimeSub.includes('mp3')) ext = 'mp3';
+      // Robust Data URL parsing that handles any codecs/parameters (e.g. data:audio/webm;codecs=opus;base64,...)
+      const commaIndex = audioData.indexOf(',');
+      if (commaIndex !== -1 && audioData.startsWith('data:')) {
+        const header = audioData.substring(0, commaIndex).toLowerCase();
+        if (header.includes('mp4') || header.includes('m4a') || header.includes('aac')) ext = 'mp4';
+        else if (header.includes('ogg')) ext = 'ogg';
+        else if (header.includes('wav')) ext = 'wav';
+        else if (header.includes('mp3') || header.includes('mpeg')) ext = 'mp3';
         else ext = 'webm';
-        base64String = matches[2];
+
+        base64String = audioData.substring(commaIndex + 1);
       }
 
+      // Strip any whitespace or newlines from base64
+      base64String = base64String.replace(/\s+/g, '');
+
+      const buffer = Buffer.from(base64String, 'base64');
       const safeFilename = `voice_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
       const targetPath = path.join(uploadsDir, safeFilename);
-      fs.writeFileSync(targetPath, Buffer.from(base64String, 'base64'));
+      fs.writeFileSync(targetPath, buffer);
       audioUrl = `/uploads/${safeFilename}`;
-      console.log(`🎙️ [Voice Note Saved] File: ${safeFilename} (${Math.round(base64String.length * 0.75 / 1024)} KB)`);
+      console.log(`🎙️ [Voice Note Saved] File: ${safeFilename} (${Math.round(buffer.length / 1024)} KB, ext: .${ext})`);
     } catch (audioErr) {
       console.error('❌ Failed to save voice audio note:', audioErr);
     }
@@ -623,20 +651,20 @@ app.post('/api/admin/upload-dp', checkAdminAuth, (req, res) => {
 
     // Determine extension and buffer
     let ext = 'jpg';
-    let buffer;
+    let base64String = imageData;
 
-    const matches = imageData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-    if (matches && matches.length === 3) {
-      const mime = matches[1].toLowerCase();
+    const commaIndex = imageData.indexOf(',');
+    if (commaIndex !== -1 && imageData.startsWith('data:')) {
+      const mime = imageData.substring(0, commaIndex).toLowerCase();
       if (mime.includes('png')) ext = 'png';
       else if (mime.includes('webp')) ext = 'webp';
       else if (mime.includes('gif')) ext = 'gif';
       else if (mime.includes('svg')) ext = 'svg';
       else if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg';
-      buffer = Buffer.from(matches[2], 'base64');
-    } else {
-      buffer = Buffer.from(imageData, 'base64');
+      base64String = imageData.substring(commaIndex + 1);
     }
+
+    const buffer = Buffer.from(base64String.replace(/\s+/g, ''), 'base64');
 
     const safeFilename = `dp_${Date.now()}.${ext}`;
     const targetPath = path.join(uploadsDir, safeFilename);
