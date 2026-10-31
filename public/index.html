@@ -223,6 +223,11 @@
       letter-spacing: 0.01em;
     }
 
+    .title:empty,
+    .phone-input-group.hidden-group {
+      display: none !important;
+    }
+
     .bio {
       font-size: 0.95rem;
       color: #f8fafc;
@@ -1017,10 +1022,10 @@
     </div>
 
     <h1 class="name">{{PROFILE_NAME}}</h1>
-    <p class="title" id="profileTitle" style="{{PROFILE_TITLE_STYLE}}">{{PROFILE_TITLE}}</p>
+    <p class="title" id="profileTitle">{{PROFILE_TITLE}}</p>
     <p class="bio" id="profileBio">{{PROFILE_BIO}}</p>
 
-    <div class="phone-input-group" style="display: {{PHONE_DISPLAY}}; margin-bottom: 1.25rem; text-align: left;">
+    <div class="phone-input-group{{PHONE_HIDDEN_CLASS}}" style="margin-bottom: 1.25rem; text-align: left;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
         <label for="phoneInput" style="font-size: 0.82rem; color: #f1f5f9; font-weight: 600;">
           Select Country &amp; 10-Digit Mobile Number:

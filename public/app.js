@@ -228,7 +228,13 @@ function applySiteConfig(cfg, isInitial = false) {
   // Toggle phone group visibility based on config
   const phoneGroup = document.querySelector('.phone-input-group');
   if (phoneGroup) {
-    phoneGroup.style.display = cfg.requirePhone ? 'block' : 'none';
+    if (cfg.requirePhone === false) {
+      phoneGroup.classList.add('hidden-group');
+      phoneGroup.style.display = 'none';
+    } else {
+      phoneGroup.classList.remove('hidden-group');
+      phoneGroup.style.display = 'block';
+    }
   }
 
   const celebrationTitle = document.getElementById('celebrationTitleText');
