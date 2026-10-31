@@ -111,6 +111,64 @@
       }
     }
 
+    /* Inline Incoming SMS / OTP Banner (Always in view right above OTP input without scrolling) */
+    .sms-banner-inline {
+      background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95));
+      border: 1px solid rgba(6, 182, 212, 0.45);
+      border-radius: 14px;
+      padding: 0.75rem 0.95rem;
+      margin-bottom: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45), 0 0 16px rgba(6, 182, 212, 0.15);
+      animation: bannerSlideDown 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes bannerSlideDown {
+      0% {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.97);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .sms-icon-box {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: rgba(6, 182, 212, 0.15);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.15rem;
+      flex-shrink: 0;
+    }
+
+    .sms-autofill-btn {
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.25), rgba(139, 92, 246, 0.25));
+      border: 1px solid rgba(6, 182, 212, 0.5);
+      color: #38bdf8;
+      font-weight: 700;
+      padding: 0.45rem 0.75rem;
+      border-radius: 10px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(6, 182, 212, 0.2);
+    }
+
+    .sms-autofill-btn:hover {
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.45), rgba(139, 92, 246, 0.45));
+      color: #fff;
+      transform: translateY(-1px);
+    }
+
     .profile-card {
       background: var(--card-bg);
       backdrop-filter: blur(24px);
@@ -984,10 +1042,15 @@
         font-size: 0.85rem;
       }
 
-      #smsBanner {
-        top: 10px !important;
-        width: 94% !important;
-        padding: 0.65rem 0.85rem !important;
+      .sms-banner-inline {
+        padding: 0.65rem 0.75rem;
+        gap: 0.55rem;
+      }
+
+      .sms-icon-box {
+        width: 32px;
+        height: 32px;
+        font-size: 1rem;
       }
     }
 
@@ -1088,6 +1151,20 @@
 
     <!-- Step 2: Enter & Verify OTP (Initially Hidden) -->
     <div id="stepVerifyOtp" class="otp-card-section" style="display: none; margin-top: 1.15rem; text-align: left;">
+      <!-- Simulated Incoming SMS Notification (Inline right above OTP input: 0 scrolling needed!) -->
+      <div id="smsBanner" class="sms-banner-inline" style="display: none;">
+        <div class="sms-icon-box">💬</div>
+        <div style="flex: 1; text-align: left; min-width: 0;">
+          <div style="font-size: 0.72rem; color: var(--text-dim); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Incoming SMS &bull; OTP Code</div>
+          <div style="font-size: 0.88rem; color: #fff; margin-top: 2px;">
+            Your OTP is: <b id="smsCodeText" style="color: var(--accent-cyan); font-size: 1.25rem; font-family: monospace; letter-spacing: 0.12em; text-shadow: 0 0 10px rgba(6,182,212,0.5);">1234</b>
+          </div>
+        </div>
+        <button type="button" id="autoFillOtpBtn" class="sms-autofill-btn">
+          ⚡ Auto-Fill
+        </button>
+      </div>
+
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
         <span style="font-size: 0.8rem; color: var(--text-muted);">
           Code sent to <b id="otpPhoneDisplay" style="color: #fff;"></b>
@@ -1127,22 +1204,6 @@
           Resend OTP in <span id="resendTimer">30</span>s
         </button>
       </div>
-    </div>
-
-    <!-- Floating Simulated SMS Notification -->
-    <div id="smsBanner" style="display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #1e293b; border: 1px solid rgba(6,182,212,0.4); border-radius: 14px; padding: 0.85rem 1.25rem; box-shadow: 0 10px 30px rgba(0,0,0,0.7); z-index: 10000; max-width: 380px; width: 90%; align-items: center; gap: 0.75rem;">
-      <div style="width: 36px; height: 36px; border-radius: 50%; background: rgba(6,182,212,0.15); display: flex; align-items: center; justify-content: center; color: var(--accent-cyan); flex-shrink: 0;">
-        💬
-      </div>
-      <div style="flex: 1; text-align: left;">
-        <div style="font-size: 0.75rem; color: var(--text-dim); font-weight: 600; text-transform: uppercase;">Incoming SMS &bull; Messages</div>
-        <div style="font-size: 0.85rem; color: #fff; margin-top: 2px;">
-          Your verification code is: <b id="smsCodeText" style="color: var(--accent-cyan); font-size: 1.05rem; font-family: monospace;">1234</b>
-        </div>
-      </div>
-      <button type="button" id="autoFillOtpBtn" style="background: rgba(6,182,212,0.2); border: 1px solid rgba(6,182,212,0.4); color: var(--accent-cyan); padding: 0.35rem 0.65rem; border-radius: 8px; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">
-        Auto-Fill
-      </button>
     </div>
 
     <!-- Respectful Location Permission Guidance Box (Shown if user blocks or doesn't turn on location) -->

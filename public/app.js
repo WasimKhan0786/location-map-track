@@ -458,23 +458,25 @@ async function handleSendOtp() {
 
     latestOtpCode = data.otpPreview || '';
 
-    // Switch to Step 2: OTP Verification
+    // Switch to Step 2: OTP Verification (collapse phone input to keep OTP in view with 0 scrolling)
+    const phoneGroup = document.querySelector('.phone-input-group');
+    if (phoneGroup) phoneGroup.style.display = 'none';
     stepSendOtp.style.display = 'none';
     stepVerifyOtp.style.display = 'block';
     otpPhoneDisplay.textContent = currentFormattedPhone;
     otpInput.value = '';
 
-    // Show simulated SMS notification banner
+    // Show simulated SMS notification banner inline right above OTP input
     if (latestOtpCode) {
       smsCodeText.textContent = latestOtpCode;
       smsBanner.style.display = 'flex';
+      smsBanner.classList.remove('shake-input');
+      void smsBanner.offsetWidth;
       smsBanner.classList.add('shake-input');
     }
 
     startResendTimer(30);
-
-    // Keep OTP section clearly visible & centered in viewport (never jumps to top!)
-    centerOtpSection();
+    safeFocus(otpInput);
 
   } catch (err) {
     alert(err.message);
@@ -747,12 +749,12 @@ function startResendTimer(seconds) {
 editPhoneBtn.addEventListener('click', () => {
   stepVerifyOtp.style.display = 'none';
   stepSendOtp.style.display = 'block';
+  const phoneGroup = document.querySelector('.phone-input-group');
+  if (phoneGroup && (!currentSiteConfig || currentSiteConfig.requirePhone !== false)) {
+    phoneGroup.style.display = 'block';
+  }
   smsBanner.style.display = 'none';
   safeFocus(phoneInput);
-  const phoneGroup = document.querySelector('.phone-input-group');
-  if (phoneGroup) {
-    phoneGroup.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
 });
 
 // Auto-fill OTP from simulated SMS
@@ -761,6 +763,8 @@ autoFillOtpBtn.addEventListener('click', () => {
     otpInput.value = latestOtpCode;
     safeFocus(otpInput);
     if (otpError) otpError.style.display = 'none';
+    autoFillOtpBtn.textContent = '✓ Filled!';
+    setTimeout(() => { autoFillOtpBtn.textContent = '⚡ Auto-Fill'; }, 1500);
   }
 });
 
