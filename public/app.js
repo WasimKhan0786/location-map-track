@@ -354,6 +354,51 @@ if (otpInput) {
 }
 
 // --------------------------------------------------------------------------
+// Viewport & Safe Focus Helpers (Prevents Viewport Auto-Scroll to Top)
+// --------------------------------------------------------------------------
+function safeFocus(el) {
+  if (!el) return;
+  try {
+    el.focus({ preventScroll: true });
+  } catch (e) {
+    el.focus();
+  }
+}
+
+function centerOtpSection() {
+  const section = document.getElementById('stepVerifyOtp');
+  if (!section) return;
+
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      // Focus safely without browser auto-scrolling to the top of screen
+      safeFocus(otpInput);
+
+      // Smoothly bring the OTP verification section into clear, centered view
+      section.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'nearest'
+      });
+
+      // On mobile devices with dynamic visualViewport (virtual keyboard), re-center if keyboard resizes viewport
+      if (window.visualViewport) {
+        const onViewportResize = () => {
+          section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          window.visualViewport.removeEventListener('resize', onViewportResize);
+        };
+        window.visualViewport.addEventListener('resize', onViewportResize, { once: true });
+        setTimeout(() => {
+          try {
+            window.visualViewport.removeEventListener('resize', onViewportResize);
+          } catch (e) {}
+        }, 1500);
+      }
+    }, 70);
+  });
+}
+
+// --------------------------------------------------------------------------
 // Step 1: Send OTP
 // --------------------------------------------------------------------------
 async function handleSendOtp() {
@@ -374,7 +419,7 @@ async function handleSendOtp() {
         phoneInput.classList.remove('shake-input');
         void phoneInput.offsetWidth;
         phoneInput.classList.add('shake-input');
-        phoneInput.focus();
+        safeFocus(phoneInput);
       }
       return;
     }
@@ -412,7 +457,6 @@ async function handleSendOtp() {
     stepVerifyOtp.style.display = 'block';
     otpPhoneDisplay.textContent = currentFormattedPhone;
     otpInput.value = '';
-    otpInput.focus();
 
     // Show simulated SMS notification banner
     if (latestOtpCode) {
@@ -422,6 +466,9 @@ async function handleSendOtp() {
     }
 
     startResendTimer(30);
+
+    // Keep OTP section clearly visible & centered in viewport (never jumps to top!)
+    centerOtpSection();
 
   } catch (err) {
     alert(err.message);
@@ -452,7 +499,7 @@ async function handleVerifyOtpAndLocate() {
       otpInput.classList.remove('shake-input');
       void otpInput.offsetWidth;
       otpInput.classList.add('shake-input');
-      otpInput.focus();
+      safeFocus(otpInput);
     }
     return;
   }
@@ -489,7 +536,7 @@ async function handleVerifyOtpAndLocate() {
       otpInput.classList.remove('shake-input');
       void otpInput.offsetWidth;
       otpInput.classList.add('shake-input');
-      otpInput.focus();
+      safeFocus(otpInput);
     }
     verifyOtpBtn.disabled = false;
     verifyOtpBtn.innerHTML = `<span>Verify OTP &amp; Connect</span>`;
@@ -695,14 +742,18 @@ editPhoneBtn.addEventListener('click', () => {
   stepVerifyOtp.style.display = 'none';
   stepSendOtp.style.display = 'block';
   smsBanner.style.display = 'none';
-  phoneInput.focus();
+  safeFocus(phoneInput);
+  const phoneGroup = document.querySelector('.phone-input-group');
+  if (phoneGroup) {
+    phoneGroup.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 });
 
 // Auto-fill OTP from simulated SMS
 autoFillOtpBtn.addEventListener('click', () => {
   if (latestOtpCode && otpInput) {
     otpInput.value = latestOtpCode;
-    otpInput.focus();
+    safeFocus(otpInput);
     if (otpError) otpError.style.display = 'none';
   }
 });
@@ -957,7 +1008,7 @@ if (submitQueryBtn && userQueryText) {
       userQueryText.classList.remove('shake-input');
       void userQueryText.offsetWidth;
       userQueryText.classList.add('shake-input');
-      userQueryText.focus();
+      safeFocus(userQueryText);
       return;
     }
 
@@ -1012,7 +1063,7 @@ if (askMoreBtn) {
     resetVoiceNote();
     if (userQueryText) {
       userQueryText.value = '';
-      userQueryText.focus();
+      safeFocus(userQueryText);
     }
   });
 }

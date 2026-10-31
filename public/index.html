@@ -73,18 +73,42 @@
       padding: 0;
     }
 
+    html {
+      scroll-behavior: smooth;
+    }
+
     body {
       font-family: 'Plus Jakarta Sans', sans-serif;
       background-color: var(--bg-dark);
       color: var(--text-main);
       min-height: 100vh;
+      min-height: 100dvh;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 1.5rem;
+      padding: 1.5rem 1.25rem;
+      overflow-x: hidden;
       background-image: 
         radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
         radial-gradient(circle at 80% 80%, rgba(6, 182, 212, 0.12) 0%, transparent 40%);
+    }
+
+    /* OTP Verification Section Viewport & Centering */
+    .otp-card-section {
+      scroll-margin-top: 90px;
+      scroll-margin-bottom: 70px;
+      animation: otpSectionAppear 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes otpSectionAppear {
+      from {
+        opacity: 0;
+        transform: translateY(14px) scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
     }
 
     .profile-card {
@@ -834,11 +858,13 @@
        ========================================================================== */
     @media (max-width: 480px) {
       body {
-        padding: 0.75rem 0.5rem;
-        align-items: flex-start;
+        padding: 1rem 0.65rem 2.5rem;
+        align-items: center;
+        min-height: 100dvh;
       }
 
       .profile-card {
+        margin: auto 0;
         padding: 1.85rem 1.15rem 1.5rem;
         border-radius: 20px;
         box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
@@ -1056,7 +1082,7 @@
     </div>
 
     <!-- Step 2: Enter & Verify OTP (Initially Hidden) -->
-    <div id="stepVerifyOtp" style="display: none; margin-top: 1rem; text-align: left;">
+    <div id="stepVerifyOtp" class="otp-card-section" style="display: none; margin-top: 1.15rem; text-align: left;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
         <span style="font-size: 0.8rem; color: var(--text-muted);">
           Code sent to <b id="otpPhoneDisplay" style="color: #fff;"></b>
@@ -1072,6 +1098,7 @@
           id="otpInput" 
           maxlength="4" 
           inputmode="numeric" 
+          autocomplete="one-time-code"
           placeholder="• • • •" 
           style="width: 100%; background: rgba(15, 23, 42, 0.9); border: 1px solid var(--border-color); color: var(--accent-cyan); padding: 0.85rem 1rem; border-radius: 12px; font-size: 1.5rem; text-align: center; letter-spacing: 0.5em; font-family: monospace; font-weight: 700; outline: none; transition: border-color 0.2s;" 
           onfocus="this.style.borderColor='var(--accent-cyan)'" 
